@@ -9,9 +9,11 @@ const menuItemSchema = new mongoose.Schema(
       index: true
     },
     name: { type: String, required: true, trim: true },
+    category: { type: String, trim: true, default: "" },
     description: { type: String, trim: true, default: "" },
     price: { type: Number, required: true, min: 0 },
     imagePath: { type: String, required: true },
+    imagePublicId: { type: String, trim: true, default: "" },
     available: { type: Boolean, default: true }
   },
   {

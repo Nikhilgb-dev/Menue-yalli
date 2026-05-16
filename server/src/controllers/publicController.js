@@ -11,7 +11,16 @@ function buildPublicBaseUrl(request) {
 }
 
 function buildImageUrl(request, imagePath) {
+  if (/^https?:\/\//i.test(String(imagePath || ""))) {
+    return imagePath;
+  }
+
   return `${request.protocol}://${request.get("host")}${imagePath}`;
+}
+
+function normalizeCategory(value) {
+  const category = String(value || "").trim();
+  return category.toLowerCase() === "menu" ? "" : category;
 }
 
 export async function getPublicMenu(request, response) {
@@ -39,6 +48,7 @@ export async function getPublicMenu(request, response) {
     menuItems: menuItems.map((item) => ({
       id: item._id,
       name: item.name,
+      category: normalizeCategory(item.category),
       description: item.description,
       price: item.price,
       imageUrl: buildImageUrl(request, item.imagePath)

@@ -24,16 +24,78 @@ const ghostButtonClass =
   "inline-flex items-center justify-center rounded-full border border-[rgba(83,48,34,0.12)] bg-[rgba(255,255,255,0.9)] px-5 py-3 text-center font-medium transition hover:-translate-y-0.5";
 const dangerButtonClass =
   "inline-flex items-center justify-center rounded-full border border-[rgba(173,47,47,0.15)] bg-[rgba(173,47,47,0.1)] px-5 py-3 text-center font-medium text-[#ad2f2f] transition hover:-translate-y-0.5";
+const defaultCategories = [
+  "Juices",
+  "Smoothie Bowls",
+  "Sundaes & Falooda",
+  "Desserts",
+  "Waffles",
+  "Hot Kitchen",
+  "Pasta",
+  "Mango Specials",
+];
 
 function createMenuDraft() {
   return {
     id: `draft-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     name: "",
+    category: "",
     description: "",
     price: "",
     available: true,
     image: null,
   };
+}
+
+function createEditDraft(item) {
+  return {
+    name: item.name || "",
+    category: item.category || "",
+    description: item.description || "",
+    price: String(item.price ?? ""),
+    available: Boolean(item.available),
+    image: null,
+  };
+}
+
+function slugifyCategory(value) {
+  return (
+    String(value || "menu")
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "menu"
+  );
+}
+
+function groupMenuItemsByCategory(menuItems) {
+  const categoryMap = new Map();
+
+  for (const item of menuItems || []) {
+    const category = String(item.category || "").trim() || "Uncategorized";
+
+    if (!categoryMap.has(category)) {
+      categoryMap.set(category, []);
+    }
+
+    categoryMap.get(category).push(item);
+  }
+
+  return Array.from(categoryMap.entries()).map(([category, items]) => ({
+    category,
+    id: slugifyCategory(category),
+    items,
+  }));
+}
+
+function getMenuCategories(menuItems) {
+  return Array.from(
+    new Set(
+      (menuItems || [])
+        .map((item) => String(item.category || "").trim())
+        .filter(Boolean),
+    ),
+  );
 }
 
 function readStoredSession() {
@@ -328,7 +390,14 @@ function DashboardPage({ session, onAuthRefresh, onLogout }) {
   const [notice, setNotice] = useState("");
   const [profileSaving, setProfileSaving] = useState(false);
   const [menuSaving, setMenuSaving] = useState(false);
+  const [editingItemId, setEditingItemId] = useState("");
+  const [editMenuSaving, setEditMenuSaving] = useState(false);
+  const [editDraft, setEditDraft] = useState(null);
   const [fileInputSeed, setFileInputSeed] = useState(0);
+  const groupedDashboardItems = groupMenuItemsByCategory(dashboard?.menuItems || []);
+  const ownerCategories = Array.from(
+    new Set([...defaultCategories, ...getMenuCategories(dashboard?.menuItems || [])]),
+  );
   const [profileForm, setProfileForm] = useState({
     businessName: "",
     businessType: "food-cart",
@@ -497,6 +566,7 @@ function DashboardPage({ session, onAuthRefresh, onLogout }) {
 
         return {
           name: draft.name,
+          category: draft.category,
           description: draft.description,
           price: draft.price,
           available: draft.available,
@@ -558,6 +628,66 @@ function DashboardPage({ session, onAuthRefresh, onLogout }) {
       await loadDashboard();
     } catch (requestError) {
       setError(requestError.message);
+    }
+  }
+
+  function startEditingMenuItem(item) {
+    setEditingItemId(item.id);
+    setEditDraft(createEditDraft(item));
+    setNotice("");
+    setError("");
+  }
+
+  function cancelEditingMenuItem() {
+    setEditingItemId("");
+    setEditDraft(null);
+  }
+
+  function updateEditDraft(field, value) {
+    setEditDraft((current) => ({ ...current, [field]: value }));
+  }
+
+  async function saveEditedMenuItem(itemId) {
+    if (!editDraft) {
+      return;
+    }
+
+    setEditMenuSaving(true);
+    setNotice("");
+    setError("");
+
+    try {
+      const formData = new FormData();
+      formData.append("name", editDraft.name);
+      formData.append("category", editDraft.category);
+      formData.append("description", editDraft.description);
+      formData.append("price", editDraft.price);
+      formData.append("available", String(editDraft.available));
+
+      if (editDraft.image) {
+        formData.append("image", editDraft.image);
+      }
+
+      const response = await fetch(`${API_BASE}/dashboard/menu-items/${itemId}`, {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${session.token}`,
+        },
+        body: formData,
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || "Unable to update menu item.");
+      }
+
+      setNotice("Menu item updated.");
+      cancelEditingMenuItem();
+      await loadDashboard();
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setEditMenuSaving(false);
     }
   }
 
@@ -833,6 +963,20 @@ function DashboardPage({ session, onAuthRefresh, onLogout }) {
                     />
                   </Field>
 
+                  <Field label="Category">
+                    <input
+                      className={inputClass}
+                      list="menu-category-options"
+                      value={draft.category}
+                      onChange={(event) =>
+                        updateMenuDraft(draft.id, "category", event.target.value)
+                      }
+                      placeholder="Optional: Starters, Main Course, Juices"
+                    />
+                  </Field>
+                </div>
+
+                <div className="grid gap-4 lg:grid-cols-2">
                   <Field label="Price">
                     <input
                       className={inputClass}
@@ -903,6 +1047,12 @@ function DashboardPage({ session, onAuthRefresh, onLogout }) {
             ))}
           </div>
 
+          <datalist id="menu-category-options">
+            {ownerCategories.map((category) => (
+              <option key={category} value={category} />
+            ))}
+          </datalist>
+
           <button
             className={`${primaryButtonClass} w-full sm:w-auto`}
             type="submit"
@@ -914,50 +1064,176 @@ function DashboardPage({ session, onAuthRefresh, onLogout }) {
           </button>
         </form>
 
-        <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="mt-6 grid gap-6">
           {dashboard.menuItems.length > 0 ? (
-            dashboard.menuItems.map((item) => (
-              <article
-                className="overflow-hidden rounded-3xl border border-[rgba(83,48,34,0.12)] bg-white/92"
-                key={item.id}
-              >
-                <img
-                  src={item.imageUrl}
-                  alt={item.name}
-                  className="block aspect-[4/3] w-full object-cover"
-                />
-                <div className="grid gap-4 p-4">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                    <h3 className="text-xl font-bold text-[#20120e]">
-                      {item.name}
-                    </h3>
-                    <span className="rounded-full bg-[#1f6a5b]/10 px-4 py-3 text-center text-sm font-bold text-[#1f6a5b]">
-                      Rs. {Number(item.price).toFixed(2)}
-                    </span>
-                  </div>
-                  <p className="break-words text-[#746157]">
-                    {item.description || "No description added."}
+            groupedDashboardItems.map((group) => (
+              <section className="grid gap-4" key={group.id}>
+                <div className="flex items-center gap-3">
+                  <span className="h-px flex-1 bg-[rgba(83,48,34,0.12)]" />
+                  <p className="rounded-full bg-[#20120e] px-4 py-2 text-sm font-semibold text-white">
+                    {group.category}
                   </p>
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <span
-                      className={`rounded-full px-4 py-3 text-center text-sm font-bold ${
-                        item.available
-                          ? "bg-[#1d7d53]/10 text-[#1d7d53]"
-                          : "bg-[#ad2f2f]/8 text-[#ad2f2f]"
-                      }`}
-                    >
-                      {item.available ? "Visible in QR menu" : "Hidden"}
-                    </span>
-                    <button
-                      className={`${dangerButtonClass} w-full sm:w-auto`}
-                      type="button"
-                      onClick={() => deleteMenuItem(item.id)}
-                    >
-                      Delete
-                    </button>
-                  </div>
+                  <span className="h-px flex-1 bg-[rgba(83,48,34,0.12)]" />
                 </div>
-              </article>
+
+                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                  {group.items.map((item) => (
+                    <article
+                      className="overflow-hidden rounded-3xl border border-[rgba(83,48,34,0.12)] bg-white/92"
+                      key={item.id}
+                    >
+                      <div className="flex aspect-[4/3] w-full items-center justify-center bg-[#fff8f2] p-3">
+                        <img
+                          src={item.imageUrl}
+                          alt={item.name}
+                          className="block h-full w-full object-contain"
+                        />
+                      </div>
+                      <div className="grid gap-4 p-4">
+                        {editingItemId === item.id && editDraft ? (
+                          <>
+                            <div className="grid gap-4">
+                              <Field label="Item name">
+                                <input
+                                  className={inputClass}
+                                  value={editDraft.name}
+                                  onChange={(event) =>
+                                    updateEditDraft("name", event.target.value)
+                                  }
+                                />
+                              </Field>
+                              <Field label="Category">
+                                <input
+                                  className={inputClass}
+                                  list="menu-category-options"
+                                  value={editDraft.category}
+                                  onChange={(event) =>
+                                    updateEditDraft("category", event.target.value)
+                                  }
+                                  placeholder="Optional category"
+                                />
+                              </Field>
+                              <Field label="Price">
+                                <input
+                                  className={inputClass}
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={editDraft.price}
+                                  onChange={(event) =>
+                                    updateEditDraft("price", event.target.value)
+                                  }
+                                />
+                              </Field>
+                              <Field label="Description">
+                                <textarea
+                                  className={inputClass}
+                                  rows="3"
+                                  value={editDraft.description}
+                                  onChange={(event) =>
+                                    updateEditDraft("description", event.target.value)
+                                  }
+                                />
+                              </Field>
+                              <Field label="Replace image">
+                                <input
+                                  className={`${inputClass} file:mr-4 file:rounded-full file:border-0 file:bg-[#20120e] file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white`}
+                                  type="file"
+                                  accept="image/*"
+                                  onChange={(event) =>
+                                    updateEditDraft(
+                                      "image",
+                                      event.target.files?.[0] || null,
+                                    )
+                                  }
+                                />
+                              </Field>
+                              <label className="flex min-w-0 items-center gap-3 rounded-2xl border border-[rgba(83,48,34,0.12)] bg-white/60 px-4 py-3">
+                                <input
+                                  className="h-4 w-4 shrink-0 accent-[#d95722]"
+                                  type="checkbox"
+                                  checked={editDraft.available}
+                                  onChange={(event) =>
+                                    updateEditDraft("available", event.target.checked)
+                                  }
+                                />
+                                <span className="text-sm text-[#746157]">
+                                  Available for public menu
+                                </span>
+                              </label>
+                            </div>
+
+                            <div className="flex flex-col gap-3 sm:flex-row">
+                              <button
+                                className={`${primaryButtonClass} w-full sm:w-auto`}
+                                type="button"
+                                disabled={editMenuSaving}
+                                onClick={() => saveEditedMenuItem(item.id)}
+                              >
+                                {editMenuSaving ? "Saving..." : "Save Changes"}
+                              </button>
+                              <button
+                                className={`${ghostButtonClass} w-full sm:w-auto`}
+                                type="button"
+                                disabled={editMenuSaving}
+                                onClick={cancelEditingMenuItem}
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                              <div className="grid gap-2">
+                                <span className="w-fit rounded-full bg-[#d95722]/10 px-3 py-1 text-xs font-semibold text-[#d95722]">
+                                  {item.category || "Uncategorized"}
+                                </span>
+                                <h3 className="text-xl font-bold text-[#20120e]">
+                                  {item.name}
+                                </h3>
+                              </div>
+                              <span className="rounded-full bg-[#1f6a5b]/10 px-4 py-3 text-center text-sm font-bold text-[#1f6a5b]">
+                                Rs. {Number(item.price).toFixed(2)}
+                              </span>
+                            </div>
+                            <p className="break-words text-[#746157]">
+                              {item.description || "No description added."}
+                            </p>
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                              <span
+                                className={`rounded-full px-4 py-3 text-center text-sm font-bold ${
+                                  item.available
+                                    ? "bg-[#1d7d53]/10 text-[#1d7d53]"
+                                    : "bg-[#ad2f2f]/8 text-[#ad2f2f]"
+                                }`}
+                              >
+                                {item.available ? "Visible in QR menu" : "Hidden"}
+                              </span>
+                              <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
+                                <button
+                                  className={`${ghostButtonClass} w-full sm:w-auto`}
+                                  type="button"
+                                  onClick={() => startEditingMenuItem(item)}
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  className={`${dangerButtonClass} w-full sm:w-auto`}
+                                  type="button"
+                                  onClick={() => deleteMenuItem(item.id)}
+                                >
+                                  Delete
+                                </button>
+                              </div>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              </section>
             ))
           ) : (
             <div className="rounded-3xl border border-[rgba(83,48,34,0.12)] bg-white/92 p-4">
@@ -975,6 +1251,14 @@ function PublicMenuPage() {
   const [payload, setPayload] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [activeCategory, setActiveCategory] = useState("all");
+  const publicCategories = getMenuCategories(payload?.menuItems || []);
+  const visibleMenuItems =
+    activeCategory === "all"
+      ? payload?.menuItems || []
+      : (payload?.menuItems || []).filter(
+          (item) => String(item.category || "").trim() === activeCategory,
+        );
 
   useEffect(() => {
     async function loadPublicMenu() {
@@ -998,6 +1282,10 @@ function PublicMenuPage() {
     }
 
     loadPublicMenu();
+  }, [slug]);
+
+  useEffect(() => {
+    setActiveCategory("all");
   }, [slug]);
 
   if (loading) {
@@ -1087,23 +1375,64 @@ function PublicMenuPage() {
             {payload.menuItems.length} items available
           </h2>
         </div>
-        <div className="grid gap-4 md:grid-cols-2">
-          {payload.menuItems.length > 0 ? (
-            payload.menuItems.map((item) => (
+        {publicCategories.length > 0 ? (
+          <>
+            <div className="mb-6 flex flex-wrap gap-3">
+              <button
+                type="button"
+                className={`rounded-full px-4 py-3 text-sm font-semibold transition ${
+                  activeCategory === "all"
+                    ? "border border-[#20120e] bg-[#20120e] text-white"
+                    : "border border-[#20120e]/10 bg-white text-[#20120e] hover:border-[#d95722]/40 hover:text-[#d95722]"
+                }`}
+                onClick={() => setActiveCategory("all")}
+              >
+                All
+              </button>
+              {publicCategories.map((category) => (
+                <button
+                  key={slugifyCategory(category)}
+                  type="button"
+                  className={`rounded-full px-4 py-3 text-sm font-semibold transition ${
+                    activeCategory === category
+                      ? "border border-[#20120e] bg-[#20120e] text-white"
+                      : "border border-[#20120e]/10 bg-white text-[#20120e] hover:border-[#d95722]/40 hover:text-[#d95722]"
+                  }`}
+                  onClick={() => setActiveCategory(category)}
+                >
+                  {category}
+                </button>
+              ))}
+            </div>
+          </>
+        ) : null}
+
+        {visibleMenuItems.length > 0 ? (
+          <div className="grid gap-4 md:grid-cols-2">
+            {visibleMenuItems.map((item) => (
               <article
                 className="overflow-hidden rounded-3xl border border-[rgba(83,48,34,0.12)] bg-white/92"
                 key={item.id}
               >
-                <img
-                  src={item.imageUrl}
-                  alt={item.name}
-                  className="block aspect-[4/3] w-full object-cover"
-                />
+                <div className="flex aspect-[4/3] w-full items-center justify-center bg-[#fff8f2] p-3">
+                  <img
+                    src={item.imageUrl}
+                    alt={item.name}
+                    className="block h-full w-full object-contain"
+                  />
+                </div>
                 <div className="grid gap-4 p-4">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                    <h3 className="text-xl font-bold text-[#20120e]">
-                      {item.name}
-                    </h3>
+                    <div className="grid gap-2">
+                      {item.category ? (
+                        <span className="w-fit rounded-full bg-[#d95722]/10 px-3 py-1 text-xs font-semibold text-[#d95722]">
+                          {item.category}
+                        </span>
+                      ) : null}
+                      <h4 className="text-xl font-bold text-[#20120e]">
+                        {item.name}
+                      </h4>
+                    </div>
                     <span className="rounded-full bg-[#1f6a5b]/10 px-4 py-3 text-center text-sm font-bold text-[#1f6a5b]">
                       Rs. {Number(item.price).toFixed(2)}
                     </span>
@@ -1113,13 +1442,13 @@ function PublicMenuPage() {
                   </p>
                 </div>
               </article>
-            ))
-          ) : (
+            ))}
+          </div>
+        ) : (
             <div className="rounded-3xl border border-[rgba(83,48,34,0.12)] bg-white/92 p-4">
               No menu items are available right now.
             </div>
-          )}
-        </div>
+        )}
       </section>
     </div>
   );

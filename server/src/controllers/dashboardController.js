@@ -9,6 +9,11 @@ function buildPublicBaseUrl(request) {
   );
 }
 
+function normalizeCategory(value) {
+  const category = String(value || "").trim();
+  return category.toLowerCase() === "menu" ? "" : category;
+}
+
 function normalizeUrl(url) {
   const trimmedValue = String(url || "").trim();
 
@@ -38,6 +43,10 @@ function normalizeSocialLinks(value) {
 }
 
 function buildImageUrl(request, imagePath) {
+  if (/^https?:\/\//i.test(String(imagePath || ""))) {
+    return imagePath;
+  }
+
   return `${request.protocol}://${request.get("host")}${imagePath}`;
 }
 
@@ -63,6 +72,7 @@ export async function getDashboard(request, response) {
     menuItems: menuItems.map((item) => ({
       id: item._id,
       name: item.name,
+      category: normalizeCategory(item.category),
       description: item.description,
       price: item.price,
       available: item.available,

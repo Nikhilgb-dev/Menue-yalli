@@ -26,7 +26,6 @@ app.use(
   })
 );
 app.use(express.json());
-app.use("/uploads", express.static(path.resolve("uploads")));
 app.get("/api/health", (_request, response) => {
   response.json({ ok: true });
 });

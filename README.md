@@ -15,7 +15,6 @@ Multi-tenant menu platform for food carts, hotels, cafes, and restaurants.
 
 - `client/`: React + Vite frontend
 - `server/`: Express + MongoDB API
-- `uploads/`: generated at runtime for menu item images
 
 ## Run locally
 
@@ -40,6 +39,10 @@ MONGO_URI=your_mongodb_connection_string
 CLIENT_URL=http://localhost:5173
 PUBLIC_APP_URL=http://localhost:5173
 JWT_SECRET=replace-this-in-production
+CLOUDINARY_CLOUD_NAME=your_cloudinary_cloud_name
+CLOUDINARY_API_KEY=your_cloudinary_api_key
+CLOUDINARY_API_SECRET=your_cloudinary_api_secret
+CLOUDINARY_FOLDER=menu-platform
 ```
 
 ## Main routes
@@ -55,6 +58,6 @@ JWT_SECRET=replace-this-in-production
 
 ## Notes
 
-- Uploaded images are stored locally under `server/uploads/`
+- Uploaded images are stored in Cloudinary, not on the local filesystem
 - MongoDB is required for the platform flow
 - The dashboard expects bearer-token auth using the JWT returned from signup/login

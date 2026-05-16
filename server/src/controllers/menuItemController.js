@@ -1,6 +1,11 @@
 import { MenuItem } from "../models/MenuItem.js";
+import { destroyImage, uploadImageBuffer } from "../utils/cloudinary.js";
 
 function buildImageUrl(request, imagePath) {
+  if (/^https?:\/\//i.test(String(imagePath || ""))) {
+    return imagePath;
+  }
+
   return `${request.protocol}://${request.get("host")}${imagePath}`;
 }
 
@@ -24,11 +29,17 @@ function normalizeAvailable(value) {
   return true;
 }
 
+function normalizeCategory(value) {
+  const category = String(value || "").trim();
+  return category.toLowerCase() === "menu" ? "" : category;
+}
+
 export async function createMenuItem(request, response) {
   const uploadedImages = getUploadedImages(request);
 
   if (request.body.items) {
     let parsedItems = [];
+    let uploadedAssets = [];
 
     try {
       parsedItems = JSON.parse(request.body.items);
@@ -59,6 +70,7 @@ export async function createMenuItem(request, response) {
         return {
           ownerId: request.owner._id,
           name,
+          category: normalizeCategory(item?.category),
           description,
           price,
           available: normalizeAvailable(item?.available),
@@ -66,12 +78,23 @@ export async function createMenuItem(request, response) {
         };
       });
 
-      const createdItems = await MenuItem.insertMany(itemsToCreate);
+      uploadedAssets = await Promise.all(
+        itemsToCreate.map((item, index) => uploadImageBuffer(uploadedImages[index]))
+      );
+
+      const createdItems = await MenuItem.insertMany(
+        itemsToCreate.map((item, index) => ({
+          ...item,
+          imagePath: uploadedAssets[index].secureUrl,
+          imagePublicId: uploadedAssets[index].publicId
+        }))
+      );
 
       return response.status(201).json({
         items: createdItems.map((item) => ({
           id: item._id,
           name: item.name,
+          category: normalizeCategory(item.category),
           description: item.description,
           price: item.price,
           available: item.available,
@@ -79,11 +102,17 @@ export async function createMenuItem(request, response) {
         }))
       });
     } catch (error) {
+      await Promise.all(
+        uploadedAssets.map((asset) =>
+          asset?.publicId ? destroyImage(asset.publicId).catch(() => undefined) : undefined
+        )
+      );
+
       return response.status(400).json({ message: error.message });
     }
   }
 
-  const { name, description, price, available } = request.body;
+  const { name, category, description, price, available } = request.body;
   const image = uploadedImages[0];
 
   if (!name || price === undefined) {
@@ -94,19 +123,24 @@ export async function createMenuItem(request, response) {
     return response.status(400).json({ message: "An image is required for each menu item." });
   }
 
+  const uploadedAsset = await uploadImageBuffer(image);
+
   const menuItem = await MenuItem.create({
     ownerId: request.owner._id,
     name: String(name).trim(),
+    category: normalizeCategory(category),
     description: String(description || "").trim(),
     price: Number(price),
     available: normalizeAvailable(available),
-    imagePath: `/uploads/${image.filename}`
+    imagePath: uploadedAsset.secureUrl,
+    imagePublicId: uploadedAsset.publicId
   });
 
   return response.status(201).json({
     item: {
       id: menuItem._id,
       name: menuItem.name,
+      category: normalizeCategory(menuItem.category),
       description: menuItem.description,
       price: menuItem.price,
       available: menuItem.available,
@@ -125,7 +159,7 @@ export async function updateMenuItem(request, response) {
     return response.status(404).json({ message: "Menu item not found." });
   }
 
-  const { name, description, price, available } = request.body;
+  const { name, category, description, price, available } = request.body;
 
   if (name !== undefined) {
     existingItem.name = String(name).trim();
@@ -133,6 +167,10 @@ export async function updateMenuItem(request, response) {
 
   if (description !== undefined) {
     existingItem.description = String(description).trim();
+  }
+
+  if (category !== undefined) {
+    existingItem.category = normalizeCategory(category);
   }
 
   if (price !== undefined) {
@@ -144,7 +182,14 @@ export async function updateMenuItem(request, response) {
   }
 
   if (request.file) {
-    existingItem.imagePath = `/uploads/${request.file.filename}`;
+    const uploadedAsset = await uploadImageBuffer(request.file);
+
+    if (existingItem.imagePublicId) {
+      await destroyImage(existingItem.imagePublicId);
+    }
+
+    existingItem.imagePath = uploadedAsset.secureUrl;
+    existingItem.imagePublicId = uploadedAsset.publicId;
   }
 
   await existingItem.save();
@@ -153,6 +198,7 @@ export async function updateMenuItem(request, response) {
     item: {
       id: existingItem._id,
       name: existingItem.name,
+      category: normalizeCategory(existingItem.category),
       description: existingItem.description,
       price: existingItem.price,
       available: existingItem.available,
@@ -169,6 +215,10 @@ export async function deleteMenuItem(request, response) {
 
   if (!deletedItem) {
     return response.status(404).json({ message: "Menu item not found." });
+  }
+
+  if (deletedItem.imagePublicId) {
+    await destroyImage(deletedItem.imagePublicId);
   }
 
   return response.status(204).send();
