@@ -1,5 +1,12 @@
 import { useEffect, useState } from "react";
 import {
+  AtSign,
+  MessageCircleMore,
+  Play,
+  Star,
+  Users,
+} from "lucide-react";
+import {
   Navigate,
   Route,
   Routes,
@@ -34,6 +41,48 @@ const defaultCategories = [
   "Pasta",
   "Mango Specials",
 ];
+const socialPlatformConfigs = [
+  {
+    id: "instagram",
+    label: "Instagram",
+    placeholder: "https://instagram.com/your-page",
+    defaultCta: "Follow on Instagram",
+    Icon: AtSign,
+    iconClassName: "text-[#ee2a7b]",
+  },
+  {
+    id: "facebook",
+    label: "Facebook",
+    placeholder: "https://facebook.com/your-page",
+    defaultCta: "Follow on Facebook",
+    Icon: Users,
+    iconClassName: "text-[#1877f2]",
+  },
+  {
+    id: "whatsapp",
+    label: "WhatsApp",
+    placeholder: "https://wa.me/91xxxxxxxxxx",
+    defaultCta: "Chat on WhatsApp",
+    Icon: MessageCircleMore,
+    iconClassName: "text-[#25d366]",
+  },
+  {
+    id: "google-reviews",
+    label: "Google Reviews",
+    placeholder: "https://g.page/.../review",
+    defaultCta: "Rate on Google",
+    Icon: Star,
+    iconClassName: "text-[#4285f4]",
+  },
+  {
+    id: "youtube",
+    label: "YouTube",
+    placeholder: "https://youtube.com/@yourchannel",
+    defaultCta: "Watch on YouTube",
+    Icon: Play,
+    iconClassName: "text-[#ff0000]",
+  },
+];
 
 function createMenuDraft() {
   return {
@@ -56,6 +105,46 @@ function createEditDraft(item) {
     available: Boolean(item.available),
     image: null,
   };
+}
+
+function createLocalId(prefix = "row") {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function hydrateSocialLinks(links) {
+  const linkMap = new Map(
+    (Array.isArray(links) ? links : []).map((link) => [
+      String(link.platform || "").trim().toLowerCase(),
+      link,
+    ]),
+  );
+
+  return socialPlatformConfigs.map((platformConfig) => {
+    const savedLink = linkMap.get(platformConfig.label.toLowerCase()) || {};
+
+    return {
+      localId: createLocalId(platformConfig.id),
+      platform: platformConfig.label,
+      url: savedLink.url || "",
+      ctaLabel: savedLink.ctaLabel || platformConfig.defaultCta,
+    };
+  });
+}
+
+function serializeSocialLinks(links) {
+  return (links || [])
+    .filter(({ url }) => String(url || "").trim())
+    .map(({ platform, url, ctaLabel }) => ({
+      platform,
+      url,
+      ctaLabel,
+    }));
+}
+
+function getSocialPlatformConfigByLabel(platform) {
+  return socialPlatformConfigs.find(
+    (item) => item.label.toLowerCase() === String(platform || "").trim().toLowerCase(),
+  );
 }
 
 function slugifyCategory(value) {
@@ -206,11 +295,7 @@ function Navbar({ owner, isAuthenticated }) {
               {owner?.slug || "owner-dashboard"}
             </p>
           </div>
-        ) : (
-          <p className="max-w-[13rem] text-right text-xs leading-5 text-[#746157] sm:max-w-none sm:text-sm">
-            Build a private QR menu for each food cart or hotel.
-          </p>
-        )}
+        ) : null}
       </div>
     </header>
   );
@@ -452,10 +537,7 @@ function DashboardPage({ session, onAuthRefresh, onLogout, onToast }) {
         phone: data.owner.phone || "",
         address: data.owner.address || "",
         description: data.owner.description || "",
-        socialLinks:
-          data.owner.socialLinks?.length > 0
-            ? data.owner.socialLinks
-            : [{ platform: "", url: "", ctaLabel: "" }],
+        socialLinks: hydrateSocialLinks(data.owner.socialLinks),
       });
       onAuthRefresh({ token: session.token, owner: data.owner });
     } catch (requestError) {
@@ -479,25 +561,6 @@ function DashboardPage({ session, onAuthRefresh, onLogout, onToast }) {
     }));
   }
 
-  function addSocialLink() {
-    setProfileForm((current) => ({
-      ...current,
-      socialLinks: [
-        ...current.socialLinks,
-        { platform: "", url: "", ctaLabel: "" },
-      ],
-    }));
-  }
-
-  function removeSocialLink(index) {
-    setProfileForm((current) => ({
-      ...current,
-      socialLinks: current.socialLinks.filter(
-        (_, linkIndex) => linkIndex !== index,
-      ),
-    }));
-  }
-
   async function handleProfileSubmit(event) {
     event.preventDefault();
     setProfileSaving(true);
@@ -511,7 +574,10 @@ function DashboardPage({ session, onAuthRefresh, onLogout, onToast }) {
           "Content-Type": "application/json",
           Authorization: `Bearer ${session.token}`,
         },
-        body: JSON.stringify(profileForm),
+        body: JSON.stringify({
+          ...profileForm,
+          socialLinks: serializeSocialLinks(profileForm.socialLinks),
+        }),
       });
       const data = await response.json();
 
@@ -877,59 +943,40 @@ function DashboardPage({ session, onAuthRefresh, onLogout, onToast }) {
             </Field>
 
             <div className="grid gap-4">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <p className={eyebrowClass}>Review</p>
-                  <h3 className="text-xl font-bold text-[#20120e]">
-                    Social handles and rating links
-                  </h3>
-                </div>
-                <button
-                  className={`${ghostButtonClass} w-full sm:w-auto`}
-                  type="button"
-                  onClick={addSocialLink}
-                >
-                  Add Link
-                </button>
+              <div>
+                <p className={eyebrowClass}>Review</p>
+                <h3 className="text-xl font-bold text-[#20120e]">
+                  Social handles and rating links
+                </h3>
+                <p className="mt-2 text-sm text-[#746157]">
+                  Add URLs only for the handles you use. Empty handles stay hidden for users.
+                </p>
               </div>
 
               {profileForm.socialLinks.map((link, index) => (
-                <div
-                  className="grid gap-3 rounded-3xl border border-[rgba(83,48,34,0.12)] bg-white/70 p-4 lg:grid-cols-[0.95fr_1.3fr_0.9fr_auto]"
-                  key={`${link.platform}-${index}`}
+                <label
+                  className="grid gap-3 rounded-3xl border border-[rgba(83,48,34,0.12)] bg-white/70 p-4 xl:grid-cols-[auto_12rem_1fr]"
+                  key={link.localId}
                 >
+                  <div className="flex items-center justify-center xl:justify-start">
+                    <SocialIcon platform={link.platform} url={link.url} />
+                  </div>
+                  <div className="grid content-center gap-1">
+                    <strong className="text-[#20120e]">{link.platform}</strong>
+                    <span className="text-xs text-[#746157]">{link.ctaLabel}</span>
+                  </div>
                   <input
                     className={inputClass}
-                    placeholder="Platform: Instagram or Google Reviews"
-                    value={link.platform}
-                    onChange={(event) =>
-                      updateSocialLink(index, "platform", event.target.value)
+                    placeholder={
+                      getSocialPlatformConfigByLabel(link.platform)?.placeholder ||
+                      "https://..."
                     }
-                  />
-                  <input
-                    className={inputClass}
-                    placeholder="https://..."
                     value={link.url}
                     onChange={(event) =>
                       updateSocialLink(index, "url", event.target.value)
                     }
                   />
-                  <input
-                    className={inputClass}
-                    placeholder="CTA: Follow or Rate"
-                    value={link.ctaLabel}
-                    onChange={(event) =>
-                      updateSocialLink(index, "ctaLabel", event.target.value)
-                    }
-                  />
-                  <button
-                    className={`${ghostButtonClass} w-full lg:w-auto`}
-                    type="button"
-                    onClick={() => removeSocialLink(index)}
-                  >
-                    Remove
-                  </button>
-                </div>
+                </label>
               ))}
             </div>
 
@@ -1388,21 +1435,6 @@ function PublicMenuPage() {
             {payload.owner.phone ? ` | ${payload.owner.phone}` : ""}
           </p>
         </div>
-        {payload.owner.socialLinks?.length > 0 ? (
-          <div className="flex flex-wrap gap-2 lg:justify-end">
-            {payload.owner.socialLinks.map((link, index) => (
-              <a
-                key={`${link.platform}-${index}-chip`}
-                href={link.url}
-                target="_blank"
-                rel="noreferrer"
-                className="rounded-full border border-[#d95722]/15 bg-[#d95722]/8 px-4 py-3 text-sm font-bold text-[#20120e]"
-              >
-                {link.platform}
-              </a>
-            ))}
-          </div>
-        ) : null}
       </header>
 
       <section className={`${panelClass} mb-5`}>
@@ -1511,6 +1543,26 @@ function PublicMenuPage() {
             Rate or follow this business
           </h2>
         </div>
+        {payload.owner.socialLinks?.length > 0 ? (
+          <div className="mb-5 flex flex-wrap gap-3">
+            {payload.owner.socialLinks.map((link, index) => (
+              <a
+                key={`${link.platform}-${index}-review-chip`}
+                href={link.url}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-2 rounded-full border border-[#d95722]/15 bg-[#d95722]/8 px-4 py-3 text-sm font-bold text-[#20120e]"
+              >
+                <SocialIcon
+                  platform={link.platform}
+                  url={link.url}
+                  className="h-8 w-8 rounded-xl text-current"
+                />
+                {link.platform}
+              </a>
+            ))}
+          </div>
+        ) : null}
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {payload.owner.socialLinks?.length > 0 ? (
             payload.owner.socialLinks.map((link, index) => (
@@ -1519,9 +1571,12 @@ function PublicMenuPage() {
                 href={link.url}
                 target="_blank"
                 rel="noreferrer"
-                className="grid gap-2 rounded-3xl border border-[rgba(83,48,34,0.12)] bg-white/92 p-4 break-words"
+                className="grid gap-3 rounded-3xl border border-[rgba(83,48,34,0.12)] bg-white/92 p-4 break-words"
               >
-                <strong className="text-[#20120e]">{link.platform}</strong>
+                <div className="flex items-center gap-3">
+                  <SocialIcon platform={link.platform} url={link.url} />
+                  <strong className="text-[#20120e]">{link.platform}</strong>
+                </div>
                 <span className="text-sm text-[#746157]">
                   {link.ctaLabel || "Open link"}
                 </span>
@@ -1582,6 +1637,24 @@ function ToastViewport({ toasts }) {
         </section>
       ))}
     </div>
+  );
+}
+
+function SocialIcon({ platform, url, className = "" }) {
+  const config =
+    getSocialPlatformConfigByLabel(platform) ||
+    socialPlatformConfigs.find((item) =>
+      String(url || "").toLowerCase().includes(item.label.toLowerCase()),
+    ) ||
+    socialPlatformConfigs.find((item) => item.id === "website");
+  const Icon = config.Icon;
+  const classes =
+    `inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-white ${config.iconClassName} ${className}`.trim();
+
+  return (
+    <span className={classes} aria-hidden="true">
+      <Icon className="h-5 w-5" strokeWidth={2.1} />
+    </span>
   );
 }
 
