@@ -1,0 +1,29 @@
+@import "tailwindcss";
+
+@layer base {
+  html,
+  body,
+  #root {
+    min-height: 100%;
+  }
+
+  body {
+    @apply m-0 bg-[#f6efe6] text-[#20120e] antialiased;
+    font-family: "Poppins", sans-serif;
+    background-image:
+      radial-gradient(circle at top left, rgba(217, 87, 34, 0.22), transparent 25%),
+      radial-gradient(circle at top right, rgba(31, 106, 91, 0.14), transparent 22%),
+      linear-gradient(180deg, #fffdf9 0%, #f6efe6 48%, #f8efe7 100%);
+  }
+
+  a {
+    @apply text-inherit no-underline;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+  }
+}
