@@ -1,5 +1,6 @@
 import { MenuItem } from "../models/MenuItem.js";
 import { Owner } from "../models/Owner.js";
+import { destroyImage } from "../utils/cloudinary.js";
 
 function buildPublicBaseUrl(request) {
   return (
@@ -111,4 +112,21 @@ export async function updateProfile(request, response) {
       socialLinks: owner.socialLinks
     }
   });
+}
+
+export async function deleteAccount(request, response) {
+  const menuItems = await MenuItem.find({ ownerId: request.owner._id }).select(
+    "_id imagePublicId"
+  );
+
+  await Promise.all(
+    menuItems.map((item) =>
+      item.imagePublicId ? destroyImage(item.imagePublicId).catch(() => undefined) : undefined
+    )
+  );
+
+  await MenuItem.deleteMany({ ownerId: request.owner._id });
+  await Owner.findByIdAndDelete(request.owner._id);
+
+  return response.status(204).send();
 }

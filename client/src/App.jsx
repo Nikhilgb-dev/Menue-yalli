@@ -122,6 +122,16 @@ function clearSession() {
 
 function App() {
   const [session, setSession] = useState(() => readStoredSession());
+  const [toasts, setToasts] = useState([]);
+
+  function showToast(message, tone = "success") {
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    setToasts((current) => [...current, { id, message, tone }]);
+
+    window.setTimeout(() => {
+      setToasts((current) => current.filter((toast) => toast.id !== id));
+    }, 3200);
+  }
 
   function handleAuthSuccess(payload) {
     const nextSession = {
@@ -141,6 +151,7 @@ function App() {
   return (
     <>
       <Navbar owner={session.owner} isAuthenticated={Boolean(session.token)} />
+      <ToastViewport toasts={toasts} />
       <Routes>
         <Route
           path="/"
@@ -148,7 +159,7 @@ function App() {
             session.token ? (
               <Navigate to="/dashboard" replace />
             ) : (
-              <AuthPage onAuthSuccess={handleAuthSuccess} />
+              <AuthPage onAuthSuccess={handleAuthSuccess} onToast={showToast} />
             )
           }
         />
@@ -160,6 +171,7 @@ function App() {
                 session={session}
                 onAuthRefresh={handleAuthSuccess}
                 onLogout={handleLogout}
+                onToast={showToast}
               />
             ) : (
               <Navigate to="/" replace />
@@ -204,7 +216,7 @@ function Navbar({ owner, isAuthenticated }) {
   );
 }
 
-function AuthPage({ onAuthSuccess }) {
+function AuthPage({ onAuthSuccess, onToast }) {
   const navigate = useNavigate();
   const [mode, setMode] = useState("signup");
   const [form, setForm] = useState({
@@ -251,9 +263,13 @@ function AuthPage({ onAuthSuccess }) {
       }
 
       onAuthSuccess(data);
+      onToast(
+        mode === "signup" ? "Account created successfully." : "Logged in successfully.",
+      );
       navigate("/dashboard");
     } catch (requestError) {
       setError(requestError.message);
+      onToast(requestError.message, "error");
     } finally {
       setSubmitting(false);
     }
@@ -383,7 +399,7 @@ function AuthPage({ onAuthSuccess }) {
   );
 }
 
-function DashboardPage({ session, onAuthRefresh, onLogout }) {
+function DashboardPage({ session, onAuthRefresh, onLogout, onToast }) {
   const [dashboard, setDashboard] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -392,6 +408,7 @@ function DashboardPage({ session, onAuthRefresh, onLogout }) {
   const [menuSaving, setMenuSaving] = useState(false);
   const [editingItemId, setEditingItemId] = useState("");
   const [editMenuSaving, setEditMenuSaving] = useState(false);
+  const [accountDeleting, setAccountDeleting] = useState(false);
   const [editDraft, setEditDraft] = useState(null);
   const [fileInputSeed, setFileInputSeed] = useState(0);
   const groupedDashboardItems = groupMenuItemsByCategory(dashboard?.menuItems || []);
@@ -504,9 +521,11 @@ function DashboardPage({ session, onAuthRefresh, onLogout }) {
 
       onAuthRefresh({ token: session.token, owner: data.owner });
       setNotice("Dashboard profile updated.");
+      onToast("Business profile updated.");
       await loadDashboard();
     } catch (requestError) {
       setError(requestError.message);
+      onToast(requestError.message, "error");
     } finally {
       setProfileSaving(false);
     }
@@ -596,9 +615,15 @@ function DashboardPage({ session, onAuthRefresh, onLogout }) {
           (data.items?.length || validDrafts.length) > 1 ? "s" : ""
         } uploaded.`,
       );
+      onToast(
+        `${data.items?.length || validDrafts.length} menu item${
+          (data.items?.length || validDrafts.length) > 1 ? "s" : ""
+        } uploaded successfully.`,
+      );
       await loadDashboard();
     } catch (requestError) {
       setError(requestError.message);
+      onToast(requestError.message, "error");
     } finally {
       setMenuSaving(false);
     }
@@ -625,9 +650,11 @@ function DashboardPage({ session, onAuthRefresh, onLogout }) {
       }
 
       setNotice("Menu item deleted.");
+      onToast("Menu item deleted.");
       await loadDashboard();
     } catch (requestError) {
       setError(requestError.message);
+      onToast(requestError.message, "error");
     }
   }
 
@@ -682,13 +709,56 @@ function DashboardPage({ session, onAuthRefresh, onLogout }) {
       }
 
       setNotice("Menu item updated.");
+      onToast("Menu item updated.");
       cancelEditingMenuItem();
       await loadDashboard();
     } catch (requestError) {
       setError(requestError.message);
+      onToast(requestError.message, "error");
     } finally {
       setEditMenuSaving(false);
     }
+  }
+
+  async function handleDeleteAccount() {
+    const confirmed = window.confirm(
+      "Delete this owner account and all menu items permanently?",
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setAccountDeleting(true);
+    setNotice("");
+    setError("");
+
+    try {
+      const response = await fetch(`${API_BASE}/dashboard/account`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${session.token}`,
+        },
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.message || "Unable to delete account.");
+      }
+
+      onToast("Account deleted successfully.");
+      onLogout();
+    } catch (requestError) {
+      setError(requestError.message);
+      onToast(requestError.message, "error");
+    } finally {
+      setAccountDeleting(false);
+    }
+  }
+
+  function handleLogoutClick() {
+    onToast("Logged out successfully.");
+    onLogout();
   }
 
   if (loading) {
@@ -728,7 +798,7 @@ function DashboardPage({ session, onAuthRefresh, onLogout }) {
           <button
             className={`${dangerButtonClass} w-full sm:w-auto`}
             type="button"
-            onClick={onLogout}
+            onClick={handleLogoutClick}
           >
             Logout
           </button>
@@ -869,6 +939,15 @@ function DashboardPage({ session, onAuthRefresh, onLogout }) {
               disabled={profileSaving}
             >
               {profileSaving ? "Saving..." : "Save Profile"}
+            </button>
+
+            <button
+              className={`${dangerButtonClass} w-full sm:w-auto`}
+              type="button"
+              disabled={accountDeleting}
+              onClick={handleDeleteAccount}
+            >
+              {accountDeleting ? "Deleting Account..." : "Delete Account"}
             </button>
           </form>
         </article>
@@ -1327,48 +1406,6 @@ function PublicMenuPage() {
       </header>
 
       <section className={`${panelClass} mb-5`}>
-        <p className="break-words text-[#746157]">
-          {payload.owner.description ||
-            "Freshly published menu for this business."}
-        </p>
-        <p className="mt-3 break-words text-sm text-[#746157]">
-          {payload.owner.address || "Address not added yet."}
-        </p>
-      </section>
-
-      <section className={`${panelClass} mb-5`}>
-        <div className="mb-5">
-          <p className={eyebrowClass}>Review</p>
-          <h2 className="text-2xl font-black text-[#20120e]">
-            Rate or follow this business
-          </h2>
-        </div>
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {payload.owner.socialLinks?.length > 0 ? (
-            payload.owner.socialLinks.map((link, index) => (
-              <a
-                key={`${link.platform}-${index}`}
-                href={link.url}
-                target="_blank"
-                rel="noreferrer"
-                className="grid gap-2 rounded-3xl border border-[rgba(83,48,34,0.12)] bg-white/92 p-4 break-words"
-              >
-                <strong className="text-[#20120e]">{link.platform}</strong>
-                <span className="text-sm text-[#746157]">
-                  {link.ctaLabel || "Open link"}
-                </span>
-                <span className="text-xs text-[#a08579]">{link.url}</span>
-              </a>
-            ))
-          ) : (
-            <div className="rounded-3xl border border-[rgba(83,48,34,0.12)] bg-white/92 p-4">
-              No review or social links added yet.
-            </div>
-          )}
-        </div>
-      </section>
-
-      <section className={panelClass}>
         <div className="mb-5">
           <p className={eyebrowClass}>Menu</p>
           <h2 className="text-2xl font-black text-[#20120e]">
@@ -1450,6 +1487,54 @@ function PublicMenuPage() {
             </div>
         )}
       </section>
+
+      <section className={`${panelClass} mb-5`}>
+        <div className="mb-5">
+          <p className={eyebrowClass}>Details</p>
+          <h2 className="text-2xl font-black text-[#20120e]">
+            About this business
+          </h2>
+        </div>
+        <p className="break-words text-[#746157]">
+          {payload.owner.description ||
+            "Freshly published menu for this business."}
+        </p>
+        <p className="mt-3 break-words text-sm text-[#746157]">
+          {payload.owner.address || "Address not added yet."}
+        </p>
+      </section>
+
+      <section className={panelClass}>
+        <div className="mb-5">
+          <p className={eyebrowClass}>Review</p>
+          <h2 className="text-2xl font-black text-[#20120e]">
+            Rate or follow this business
+          </h2>
+        </div>
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {payload.owner.socialLinks?.length > 0 ? (
+            payload.owner.socialLinks.map((link, index) => (
+              <a
+                key={`${link.platform}-${index}`}
+                href={link.url}
+                target="_blank"
+                rel="noreferrer"
+                className="grid gap-2 rounded-3xl border border-[rgba(83,48,34,0.12)] bg-white/92 p-4 break-words"
+              >
+                <strong className="text-[#20120e]">{link.platform}</strong>
+                <span className="text-sm text-[#746157]">
+                  {link.ctaLabel || "Open link"}
+                </span>
+                <span className="text-xs text-[#a08579]">{link.url}</span>
+              </a>
+            ))
+          ) : (
+            <div className="rounded-3xl border border-[rgba(83,48,34,0.12)] bg-white/92 p-4">
+              No review or social links added yet.
+            </div>
+          )}
+        </div>
+      </section>
     </div>
   );
 }
@@ -1474,6 +1559,29 @@ function NoticeBox({ children, tone }) {
     >
       {children}
     </section>
+  );
+}
+
+function ToastViewport({ toasts }) {
+  if (toasts.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="pointer-events-none fixed right-4 top-24 z-[60] grid w-[min(22rem,calc(100%-2rem))] gap-3">
+      {toasts.map((toast) => (
+        <section
+          key={toast.id}
+          className={`rounded-3xl border px-4 py-3 shadow-[0_26px_70px_rgba(88,45,24,0.16)] backdrop-blur-md ${
+            toast.tone === "error"
+              ? "border-[#ad2f2f]/20 bg-[rgba(255,246,246,0.96)] text-[#ad2f2f]"
+              : "border-[#1d7d53]/20 bg-[rgba(247,255,251,0.96)] text-[#1d7d53]"
+          }`}
+        >
+          <p className="text-sm font-semibold">{toast.message}</p>
+        </section>
+      ))}
+    </div>
   );
 }
 

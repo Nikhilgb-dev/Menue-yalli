@@ -1,5 +1,9 @@
 import { Router } from "express";
-import { getDashboard, updateProfile } from "../controllers/dashboardController.js";
+import {
+  deleteAccount,
+  getDashboard,
+  updateProfile
+} from "../controllers/dashboardController.js";
 import {
   createMenuItem,
   deleteMenuItem,
@@ -13,6 +17,7 @@ const router = Router();
 router.use(requireAuth);
 router.get("/", getDashboard);
 router.put("/profile", updateProfile);
+router.delete("/account", deleteAccount);
 router.post(
   "/menu-items",
   upload.fields([

@@ -51,6 +51,7 @@ CLOUDINARY_FOLDER=menu-platform
 - `POST /api/auth/login`
 - `GET /api/dashboard`
 - `PUT /api/dashboard/profile`
+- `DELETE /api/dashboard/account`
 - `POST /api/dashboard/menu-items`
 - `DELETE /api/dashboard/menu-items/:itemId`
 - `GET /api/public/:slug`
