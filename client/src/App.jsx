@@ -10,6 +10,7 @@ import {
   Navigate,
   Route,
   Routes,
+  useLocation,
   useNavigate,
   useParams,
 } from "react-router-dom";
@@ -212,6 +213,8 @@ function clearSession() {
 function App() {
   const [session, setSession] = useState(() => readStoredSession());
   const [toasts, setToasts] = useState([]);
+  const location = useLocation();
+  const isPublicMenuRoute = location.pathname.startsWith("/menu/");
 
   function showToast(message, tone = "success") {
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -239,7 +242,9 @@ function App() {
 
   return (
     <>
-      <Navbar owner={session.owner} isAuthenticated={Boolean(session.token)} />
+      {!isPublicMenuRoute ? (
+        <Navbar owner={session.owner} isAuthenticated={Boolean(session.token)} />
+      ) : null}
       <ToastViewport toasts={toasts} />
       <Routes>
         <Route
@@ -278,13 +283,12 @@ function Navbar({ owner, isAuthenticated }) {
   return (
     <header className="fixed inset-x-0 top-0 z-50 border-b border-[rgba(83,48,34,0.12)] bg-[rgba(255,248,242,0.92)] backdrop-blur-xl">
       <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
-        <div>
-          <h1 className="text-lg font-black text-[#20120e] sm:text-xl">
-            MenueYalli
-          </h1>
-          <p className="text-xs font-black uppercase tracking-[0.32em] text-[#d95722]">
-            QR Menu Platform
-          </p>
+        <div className="flex items-center gap-3">
+          <img
+            src="/assets/menu_logo.png"
+            alt="MenuYalli"
+            className="h-8 w-auto object-contain"
+          />
         </div>
         {isAuthenticated ? (
           <div className="text-right">
@@ -310,6 +314,7 @@ function AuthPage({ onAuthSuccess, onToast }) {
     email: "",
     password: "",
   });
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -365,6 +370,13 @@ function AuthPage({ onAuthSuccess, onToast }) {
       className={`${shellClass} grid min-h-screen items-center gap-6 lg:grid-cols-[1.15fr_0.85fr]`}
     >
       <section className={panelClass}>
+        <div className="mb-4">
+          <img
+            src="/assets/menu_logo.png"
+            alt="MenuYalli"
+            className="h-10 w-auto object-contain"
+          />
+        </div>
         <p className={eyebrowClass}>Multi-Tenant QR Menu Platform</p>
         <h2 className="max-w-3xl text-4xl font-black leading-tight text-[#20120e] sm:text-5xl">
           Create one menu per cart or hotel, then share it with a private QR.
@@ -452,15 +464,24 @@ function AuthPage({ onAuthSuccess, onToast }) {
           </Field>
 
           <Field label="Password">
-            <input
-              className={inputClass}
-              type="password"
-              name="password"
-              value={form.password}
-              onChange={updateField}
-              placeholder="Enter password"
-              required
-            />
+            <div className="grid gap-2">
+              <input
+                className={inputClass}
+                type={showPassword ? "text" : "password"}
+                name="password"
+                value={form.password}
+                onChange={updateField}
+                placeholder="Enter password"
+                required
+              />
+              <button
+                className="w-fit text-sm font-medium text-[#746157] underline decoration-[#d95722]/35 underline-offset-4"
+                type="button"
+                onClick={() => setShowPassword((current) => !current)}
+              >
+                {showPassword ? "Hide password" : "View password"}
+              </button>
+            </div>
           </Field>
 
           {error ? (
@@ -841,16 +862,28 @@ function DashboardPage({ session, onAuthRefresh, onLogout, onToast }) {
     <div className={`${shellClass} overflow-x-hidden`}>
       <header className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="min-w-0">
-          <p className={eyebrowClass}>Owner Dashboard</p>
-          <h2 className="break-words text-3xl font-black text-[#20120e] sm:text-4xl">
+          <h2 className="wrap-break-word text-3xl font-black text-[#20120e] sm:text-4xl">
             {dashboard.owner.businessName}
           </h2>
-          <p className="mt-2 break-all text-sm text-[#746157]">
-            Public slug:{" "}
-            <code className="rounded-full bg-[rgba(32,18,14,0.08)] px-2 py-1">
-              {dashboard.owner.slug}
-            </code>
-          </p>
+          <div className="mt-1 flex items-center gap-2">
+            <span className="text-xs font-semibold uppercase text-[#d95722]">
+              Powered by
+            </span>
+            <a
+              href="https://menueyalli.cloud"
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-end text-sm font-semibold text-[#20120e]"
+              aria-label="MenueYalli website"
+            >
+              <img
+                src="/assets/menu_logo.png"
+                alt="MenueYalli"
+                className="h-6 w-auto object-contain"
+              />
+              <span>.cloud</span>
+            </a>
+          </div>
         </div>
         <div className="flex w-full flex-col gap-3 sm:flex-row lg:w-auto">
           <a
@@ -1011,7 +1044,7 @@ function DashboardPage({ session, onAuthRefresh, onLogout, onToast }) {
             <img
               src={dashboard.qrCodeUrl}
               alt="QR for menu"
-              className="mx-auto aspect-square w-full max-w-[240px] rounded-3xl border border-[rgba(83,48,34,0.12)] bg-white p-4 object-contain"
+              className="mx-auto aspect-square w-full max-w-60 rounded-3xl border border-[rgba(83,48,34,0.12)] bg-white p-4 object-contain"
             />
             <a
               className={`${primaryButtonClass} w-full`}
@@ -1208,7 +1241,7 @@ function DashboardPage({ session, onAuthRefresh, onLogout, onToast }) {
                       className="overflow-hidden rounded-3xl border border-[rgba(83,48,34,0.12)] bg-white/92"
                       key={item.id}
                     >
-                      <div className="flex aspect-[4/3] w-full items-center justify-center bg-[#fff8f2] p-3">
+                      <div className="flex aspect-4/3 w-full items-center justify-center bg-[#fff8f2] p-3">
                         <img
                           src={item.imageUrl}
                           alt={item.name}
@@ -1323,7 +1356,7 @@ function DashboardPage({ session, onAuthRefresh, onLogout, onToast }) {
                                 Rs. {Number(item.price).toFixed(2)}
                               </span>
                             </div>
-                            <p className="break-words text-[#746157]">
+                            <p className="wrap-break-word text-[#746157]">
                               {item.description || "No description added."}
                             </p>
                             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -1424,18 +1457,60 @@ function PublicMenuPage() {
 
   return (
     <div className={`${shellClass} overflow-x-hidden`}>
-      <header className="mb-5 grid gap-5 lg:grid-cols-[1fr_auto] lg:items-start">
-        <div className="min-w-0">
-          <p className={eyebrowClass}>Scan to View Menu</p>
-          <h2 className="break-words text-3xl font-black text-[#20120e] sm:text-4xl">
-            {payload.owner.businessName}
-          </h2>
-          <p className="mt-2 break-words text-sm text-[#746157]">
-            {payload.owner.businessType}
-            {payload.owner.phone ? ` | ${payload.owner.phone}` : ""}
-          </p>
+      <header className="fixed inset-x-0 top-0 z-50 border-b border-[rgba(83,48,34,0.12)] bg-[rgba(255,248,242,0.92)] backdrop-blur-xl">
+        <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
+          <div className="min-w-0">
+            <h1 className="wrap-break-word text-lg font-black text-[#20120e] sm:text-xl">
+              {payload.owner.businessName}
+            </h1>
+            <div className="mt-1 flex items-center gap-2">
+              <span className="text-xs font-semibold uppercase text-[#d95722]">
+                Powered by
+              </span>
+              <a
+                href="https://menueyalli.cloud"
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-end text-sm font-semibold text-[#20120e]"
+                aria-label="MenueYalli website"
+              >
+                <img
+                  src="/assets/menu_logo.png"
+                  alt="MenueYalli"
+                  className="h-6 w-auto object-contain"
+                />
+                <span>.cloud</span>
+              </a>
+            </div>
+          </div>
         </div>
       </header>
+
+      {payload.owner.socialLinks?.length > 0 ? (
+        <section className={`${panelClass} mb-5`}>
+          <div className="mb-3">
+            <p className={eyebrowClass}>Connect</p>
+            <h2 className="text-lg font-bold text-[#20120e]">
+              Follow or rate our business
+            </h2>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            {payload.owner.socialLinks.map((link, index) => (
+              <a
+                key={`${link.platform}-${index}-top-icon`}
+                href={link.url}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center justify-center rounded-2xl border border-[rgba(83,48,34,0.12)] bg-white p-2.5"
+                aria-label={link.platform}
+                title={link.platform}
+              >
+                <SocialIcon platform={link.platform} url={link.url} />
+              </a>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       <section className={`${panelClass} mb-5`}>
         <div className="mb-5">
@@ -1483,7 +1558,7 @@ function PublicMenuPage() {
                 className="overflow-hidden rounded-3xl border border-[rgba(83,48,34,0.12)] bg-white/92"
                 key={item.id}
               >
-                <div className="flex aspect-[4/3] w-full items-center justify-center bg-[#fff8f2] p-3">
+                <div className="flex aspect-4/3 w-full items-center justify-center bg-[#fff8f2] p-3">
                   <img
                     src={item.imageUrl}
                     alt={item.name}
@@ -1506,7 +1581,7 @@ function PublicMenuPage() {
                       Rs. {Number(item.price).toFixed(2)}
                     </span>
                   </div>
-                  <p className="break-words text-[#746157]">
+                  <p className="wrap-break-word text-[#746157]">
                     {item.description || "No description added."}
                   </p>
                 </div>
@@ -1527,68 +1602,22 @@ function PublicMenuPage() {
             About this business
           </h2>
         </div>
-        <p className="break-words text-[#746157]">
+        <div className="mb-4 grid gap-1">
+          <h3 className="wrap-break-word text-xl font-bold text-[#20120e]">
+            {payload.owner.businessName}
+          </h3>
+          <p className="text-sm text-[#746157]">{payload.owner.businessType}</p>
+          <p className="wrap-break-word text-sm text-[#746157]">
+            {payload.owner.phone || "Contact details not added yet."}
+          </p>
+        </div>
+        <p className="wrap-break-word text-[#746157]">
           {payload.owner.description ||
             "Freshly published menu for this business."}
         </p>
-        <p className="mt-3 break-words text-sm text-[#746157]">
+        <p className="mt-3 wrap-break-word text-sm text-[#746157]">
           {payload.owner.address || "Address not added yet."}
         </p>
-      </section>
-
-      <section className={panelClass}>
-        <div className="mb-5">
-          <p className={eyebrowClass}>Review</p>
-          <h2 className="text-2xl font-black text-[#20120e]">
-            Rate or follow this business
-          </h2>
-        </div>
-        {payload.owner.socialLinks?.length > 0 ? (
-          <div className="mb-5 flex flex-wrap gap-3">
-            {payload.owner.socialLinks.map((link, index) => (
-              <a
-                key={`${link.platform}-${index}-review-chip`}
-                href={link.url}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-2 rounded-full border border-[#d95722]/15 bg-[#d95722]/8 px-4 py-3 text-sm font-bold text-[#20120e]"
-              >
-                <SocialIcon
-                  platform={link.platform}
-                  url={link.url}
-                  className="h-8 w-8 rounded-xl text-current"
-                />
-                {link.platform}
-              </a>
-            ))}
-          </div>
-        ) : null}
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {payload.owner.socialLinks?.length > 0 ? (
-            payload.owner.socialLinks.map((link, index) => (
-              <a
-                key={`${link.platform}-${index}`}
-                href={link.url}
-                target="_blank"
-                rel="noreferrer"
-                className="grid gap-3 rounded-3xl border border-[rgba(83,48,34,0.12)] bg-white/92 p-4 break-words"
-              >
-                <div className="flex items-center gap-3">
-                  <SocialIcon platform={link.platform} url={link.url} />
-                  <strong className="text-[#20120e]">{link.platform}</strong>
-                </div>
-                <span className="text-sm text-[#746157]">
-                  {link.ctaLabel || "Open link"}
-                </span>
-                <span className="text-xs text-[#a08579]">{link.url}</span>
-              </a>
-            ))
-          ) : (
-            <div className="rounded-3xl border border-[rgba(83,48,34,0.12)] bg-white/92 p-4">
-              No review or social links added yet.
-            </div>
-          )}
-        </div>
       </section>
     </div>
   );
@@ -1623,7 +1652,7 @@ function ToastViewport({ toasts }) {
   }
 
   return (
-    <div className="pointer-events-none fixed right-4 top-24 z-[60] grid w-[min(22rem,calc(100%-2rem))] gap-3">
+    <div className="pointer-events-none fixed right-4 top-24 z-60 grid w-[min(22rem,calc(100%-2rem))] gap-3">
       {toasts.map((toast) => (
         <section
           key={toast.id}
@@ -1646,7 +1675,7 @@ function SocialIcon({ platform, url, className = "" }) {
     socialPlatformConfigs.find((item) =>
       String(url || "").toLowerCase().includes(item.label.toLowerCase()),
     ) ||
-    socialPlatformConfigs.find((item) => item.id === "website");
+    socialPlatformConfigs[0];
   const Icon = config.Icon;
   const classes =
     `inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-white ${config.iconClassName} ${className}`.trim();
