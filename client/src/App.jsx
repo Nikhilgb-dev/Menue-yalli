@@ -8,7 +8,7 @@ import {
   useParams,
 } from "react-router-dom";
 
-const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5001/api";
+const API_BASE = import.meta.env.VITE_API_URL || "/api";
 const STORAGE_KEY = "menu-platform-session";
 
 const shellClass =
