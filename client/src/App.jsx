@@ -10,6 +10,7 @@ import {
 
 const API_BASE = import.meta.env.VITE_API_URL || "/api";
 const STORAGE_KEY = "menu-platform-session";
+const ADMIN_STORAGE_KEY = "menu-platform-admin-session";
 
 const shellClass =
   "mx-auto w-full max-w-7xl px-4 pb-8 pt-24 sm:px-6 sm:pb-10 sm:pt-28 lg:px-8";
@@ -176,33 +177,61 @@ function getMenuCategories(menuItems) {
   );
 }
 
-function readStoredSession() {
-  const rawValue = window.localStorage.getItem(STORAGE_KEY);
+function readStoredSession(storageKey) {
+  const rawValue = window.localStorage.getItem(storageKey);
 
   if (!rawValue) {
-    return { token: "", owner: null };
+    return {};
   }
 
   try {
     return JSON.parse(rawValue);
   } catch (_error) {
-    return { token: "", owner: null };
+    return {};
   }
 }
 
-function persistSession(session) {
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
+function persistSession(storageKey, session) {
+  window.localStorage.setItem(storageKey, JSON.stringify(session));
 }
 
-function clearSession() {
-  window.localStorage.removeItem(STORAGE_KEY);
+function clearSession(storageKey) {
+  window.localStorage.removeItem(storageKey);
+}
+
+function formatDateTime(value) {
+  if (!value) {
+    return "Not available";
+  }
+
+  return new Intl.DateTimeFormat("en-IN", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(value));
+}
+
+function formatBusinessType(value) {
+  return String(value || "other")
+    .split("-")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }
 
 function App() {
-  const [session, setSession] = useState(() => readStoredSession());
+  const [session, setSession] = useState(() => ({
+    token: "",
+    owner: null,
+    ...readStoredSession(STORAGE_KEY),
+  }));
+  const [adminSession, setAdminSession] = useState(() => ({
+    token: "",
+    admin: null,
+    ...readStoredSession(ADMIN_STORAGE_KEY),
+  }));
   const [toasts, setToasts] = useState([]);
   const location = useLocation();
   const isPublicMenuRoute = location.pathname.startsWith("/menu/");
+  const isAdminRoute = location.pathname.startsWith("/admin");
 
   function showToast(message, tone = "success") {
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -220,18 +249,38 @@ function App() {
     };
 
     setSession(nextSession);
-    persistSession(nextSession);
+    persistSession(STORAGE_KEY, nextSession);
   }
 
   function handleLogout() {
-    clearSession();
+    clearSession(STORAGE_KEY);
     setSession({ token: "", owner: null });
+  }
+
+  function handleAdminAuthSuccess(payload) {
+    const nextSession = {
+      token: payload.token,
+      admin: payload.admin,
+    };
+
+    setAdminSession(nextSession);
+    persistSession(ADMIN_STORAGE_KEY, nextSession);
+  }
+
+  function handleAdminLogout() {
+    clearSession(ADMIN_STORAGE_KEY);
+    setAdminSession({ token: "", admin: null });
   }
 
   return (
     <>
       {!isPublicMenuRoute ? (
-        <Navbar owner={session.owner} isAuthenticated={Boolean(session.token)} />
+        <Navbar
+          owner={session.owner}
+          admin={adminSession.admin}
+          isAuthenticated={Boolean(session.token)}
+          isAdminRoute={isAdminRoute}
+        />
       ) : null}
       <ToastViewport toasts={toasts} />
       <Routes>
@@ -260,6 +309,33 @@ function App() {
             )
           }
         />
+        <Route
+          path="/admin"
+          element={
+            adminSession.token ? (
+              <Navigate to="/admin/dashboard" replace />
+            ) : (
+              <AdminAuthPage
+                onAuthSuccess={handleAdminAuthSuccess}
+                onToast={showToast}
+              />
+            )
+          }
+        />
+        <Route
+          path="/admin/dashboard"
+          element={
+            adminSession.token ? (
+              <AdminDashboardPage
+                session={adminSession}
+                onLogout={handleAdminLogout}
+                onToast={showToast}
+              />
+            ) : (
+              <Navigate to="/admin" replace />
+            )
+          }
+        />
         <Route path="/menu/:slug" element={<PublicMenuPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
@@ -267,7 +343,7 @@ function App() {
   );
 }
 
-function Navbar({ owner, isAuthenticated }) {
+function Navbar({ owner, admin, isAuthenticated, isAdminRoute }) {
   return (
     <header className="fixed inset-x-0 top-0 z-50 border-b border-[rgba(83,48,34,0.12)] bg-[rgba(255,248,242,0.92)] backdrop-blur-xl">
       <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
@@ -278,7 +354,12 @@ function Navbar({ owner, isAuthenticated }) {
             className="h-8 w-auto object-contain"
           />
         </div>
-        {isAuthenticated ? (
+        {isAdminRoute && admin ? (
+          <div className="text-right">
+            <p className="text-sm font-semibold text-[#20120e]">Admin Dashboard</p>
+            <p className="text-xs text-[#746157]">{admin.email}</p>
+          </div>
+        ) : isAuthenticated ? (
           <div className="text-right">
             <p className="text-sm font-semibold text-[#20120e]">
               {owner?.businessName}
@@ -296,6 +377,7 @@ function Navbar({ owner, isAuthenticated }) {
 function AuthPage({ onAuthSuccess, onToast }) {
   const navigate = useNavigate();
   const [mode, setMode] = useState("signup");
+  const [showReset, setShowReset] = useState(false);
   const [form, setForm] = useState({
     businessName: "",
     businessType: "food-cart",
@@ -392,103 +474,454 @@ function AuthPage({ onAuthSuccess, onToast }) {
       </section>
 
       <section className={panelClass}>
-        <div className="mb-5 grid grid-cols-2 gap-3">
-          {["signup", "login"].map((currentMode) => (
-            <button
-              key={currentMode}
-              type="button"
-              className={`rounded-full border px-4 py-3 font-medium transition ${
-                mode === currentMode
-                  ? "border-[#20120e] bg-[#20120e] text-white"
-                  : "border-[rgba(83,48,34,0.12)] bg-transparent text-[#20120e]"
-              }`}
-              onClick={() => setMode(currentMode)}
-            >
-              {currentMode === "signup" ? "Sign Up" : "Login"}
-            </button>
-          ))}
-        </div>
+        {showReset ? (
+          <PasswordResetForm
+            defaultEmail={form.email}
+            heading="Reset owner password"
+            description="Enter the registered owner email and set a new password."
+            onBack={() => setShowReset(false)}
+            onToast={onToast}
+          />
+        ) : (
+          <>
+            <div className="mb-5 grid grid-cols-2 gap-3">
+              {["signup", "login"].map((currentMode) => (
+                <button
+                  key={currentMode}
+                  type="button"
+                  className={`rounded-full border px-4 py-3 font-medium transition ${
+                    mode === currentMode
+                      ? "border-[#20120e] bg-[#20120e] text-white"
+                      : "border-[rgba(83,48,34,0.12)] bg-transparent text-[#20120e]"
+                  }`}
+                  onClick={() => {
+                    setMode(currentMode);
+                    setShowReset(false);
+                  }}
+                >
+                  {currentMode === "signup" ? "Sign Up" : "Login"}
+                </button>
+              ))}
+            </div>
 
-        <form className="grid gap-4" onSubmit={handleSubmit}>
-          {mode === "signup" ? (
-            <>
-              <Field label="Business name">
+            <form className="grid gap-4" onSubmit={handleSubmit}>
+              {mode === "signup" ? (
+                <>
+                  <Field label="Business name">
+                    <input
+                      className={inputClass}
+                      name="businessName"
+                      value={form.businessName}
+                      onChange={updateField}
+                      placeholder="Cart A or Green Leaf Hotel"
+                      required
+                    />
+                  </Field>
+                  <Field label="Business type">
+                    <select
+                      className={inputClass}
+                      name="businessType"
+                      value={form.businessType}
+                      onChange={updateField}
+                    >
+                      <option value="food-cart">Food Cart</option>
+                      <option value="hotel">Hotel</option>
+                      <option value="restaurant">Restaurant</option>
+                      <option value="cafe">Cafe</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </Field>
+                </>
+              ) : null}
+
+              <Field label="Email">
                 <input
                   className={inputClass}
-                  name="businessName"
-                  value={form.businessName}
+                  type="email"
+                  name="email"
+                  value={form.email}
                   onChange={updateField}
-                  placeholder="Cart A or Green Leaf Hotel"
+                  placeholder="owner@example.com"
                   required
                 />
               </Field>
-              <Field label="Business type">
-                <select
-                  className={inputClass}
-                  name="businessType"
-                  value={form.businessType}
-                  onChange={updateField}
-                >
-                  <option value="food-cart">Food Cart</option>
-                  <option value="hotel">Hotel</option>
-                  <option value="restaurant">Restaurant</option>
-                  <option value="cafe">Cafe</option>
-                  <option value="other">Other</option>
-                </select>
-              </Field>
-            </>
-          ) : null}
 
-          <Field label="Email">
+              <Field label="Password">
+                <div className="grid gap-2">
+                  <input
+                    className={inputClass}
+                    type={showPassword ? "text" : "password"}
+                    name="password"
+                    value={form.password}
+                    onChange={updateField}
+                    placeholder="Enter password"
+                    required
+                  />
+                  <button
+                    className="w-fit text-sm font-medium text-[#746157] underline decoration-[#d95722]/35 underline-offset-4"
+                    type="button"
+                    onClick={() => setShowPassword((current) => !current)}
+                  >
+                    {showPassword ? "Hide password" : "View password"}
+                  </button>
+                </div>
+              </Field>
+
+              {error ? (
+                <p className="text-sm font-medium text-[#ad2f2f]">{error}</p>
+              ) : null}
+
+              <button
+                className={primaryButtonClass}
+                type="submit"
+                disabled={submitting}
+              >
+                {submitting
+                  ? "Please wait..."
+                  : mode === "signup"
+                    ? "Create Owner Account"
+                    : "Login to Dashboard"}
+              </button>
+
+              {mode === "login" ? (
+                <button
+                  className="text-left text-sm font-medium text-[#746157] underline decoration-[#d95722]/35 underline-offset-4"
+                  type="button"
+                  onClick={() => setShowReset(true)}
+                >
+                  Forgot password?
+                </button>
+              ) : null}
+
+              <div className="pt-1 text-center">
+                <a
+                  href="/admin"
+                  className="text-sm font-medium text-[#746157] underline decoration-[#d95722]/35 underline-offset-4"
+                >
+                  Admin login
+                </a>
+              </div>
+            </form>
+          </>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function AdminAuthPage({ onAuthSuccess, onToast }) {
+  const navigate = useNavigate();
+  const [showReset, setShowReset] = useState(false);
+  const [form, setForm] = useState({
+    email: "",
+    password: "",
+  });
+  const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  function updateField(event) {
+    const { name, value } = event.target;
+    setForm((current) => ({ ...current, [name]: value }));
+  }
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+    setError("");
+    setSubmitting(true);
+
+    try {
+      const response = await fetch(`${API_BASE}/auth/admin/login`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(form),
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || "Unable to login as admin.");
+      }
+
+      onAuthSuccess(data);
+      onToast("Admin login successful.");
+      navigate("/admin/dashboard");
+    } catch (requestError) {
+      setError(requestError.message);
+      onToast(requestError.message, "error");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div
+      className={`${shellClass} grid min-h-screen items-center gap-6 lg:grid-cols-[1.05fr_0.95fr]`}
+    >
+      <section className={panelClass}>
+        <p className={eyebrowClass}>Admin Access</p>
+        <h2 className="max-w-3xl text-4xl font-black leading-tight text-[#20120e] sm:text-5xl">
+          Track every owner registration from one place.
+        </h2>
+        <p className="mt-5 max-w-3xl text-base leading-8 text-[#746157] sm:text-[1.04rem]">
+          Monitor registered businesses, contact details, public menu links,
+          social links, and menu publishing activity through a dedicated admin
+          dashboard.
+        </p>
+        <div className="mt-6 grid gap-3 sm:grid-cols-2">
+          {[
+            "Registration history",
+            "Business contact details",
+            "Menu item activity",
+            "Public menu links",
+          ].map((point) => (
+            <span
+              key={point}
+              className="rounded-full border border-[#d95722]/15 bg-[#d95722]/8 px-4 py-3 text-sm font-bold"
+            >
+              {point}
+            </span>
+          ))}
+        </div>
+      </section>
+
+      <section className={panelClass}>
+        {showReset ? (
+          <PasswordResetForm
+            defaultEmail={form.email}
+            heading="Reset admin password"
+            description="Enter the registered admin email and set a new password."
+            onBack={() => setShowReset(false)}
+            onToast={onToast}
+          />
+        ) : (
+          <>
+            <div className="mb-4">
+              <h3 className="text-2xl font-black text-[#20120e]">Admin Login</h3>
+              <p className="mt-2 text-sm text-[#746157]">
+                Use the configured admin credentials to open the registrations
+                dashboard.
+              </p>
+            </div>
+
+            <form className="grid gap-4" onSubmit={handleSubmit}>
+              <Field label="Admin email">
+                <input
+                  className={inputClass}
+                  type="email"
+                  name="email"
+                  value={form.email}
+                  onChange={updateField}
+                  placeholder="admin@menuyelli.cloud"
+                  required
+                />
+              </Field>
+
+              <Field label="Password">
+                <div className="grid gap-2">
+                  <input
+                    className={inputClass}
+                    type={showPassword ? "text" : "password"}
+                    name="password"
+                    value={form.password}
+                    onChange={updateField}
+                    placeholder="Enter admin password"
+                    required
+                  />
+                  <button
+                    className="w-fit text-sm font-medium text-[#746157] underline decoration-[#d95722]/35 underline-offset-4"
+                    type="button"
+                    onClick={() => setShowPassword((current) => !current)}
+                  >
+                    {showPassword ? "Hide password" : "View password"}
+                  </button>
+                </div>
+              </Field>
+
+              {error ? (
+                <p className="text-sm font-medium text-[#ad2f2f]">{error}</p>
+              ) : null}
+
+              <button
+                className={primaryButtonClass}
+                type="submit"
+                disabled={submitting}
+              >
+                {submitting ? "Please wait..." : "Open Admin Dashboard"}
+              </button>
+
+              <button
+                className="text-left text-sm font-medium text-[#746157] underline decoration-[#d95722]/35 underline-offset-4"
+                type="button"
+                onClick={() => setShowReset(true)}
+              >
+                Forgot password?
+              </button>
+
+              <div className="pt-1 text-center">
+                <a
+                  href="/"
+                  className="text-sm font-medium text-[#746157] underline decoration-[#d95722]/35 underline-offset-4"
+                >
+                  Back to owner signup and login
+                </a>
+              </div>
+            </form>
+          </>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function PasswordResetForm({
+  defaultEmail = "",
+  heading,
+  description,
+  onBack,
+  onToast,
+}) {
+  const [form, setForm] = useState({
+    email: defaultEmail,
+    password: "",
+    confirmPassword: "",
+  });
+  const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [successMessage, setSuccessMessage] = useState("");
+
+  function updateField(event) {
+    const { name, value } = event.target;
+    setForm((current) => ({ ...current, [name]: value }));
+  }
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+    setError("");
+    setSuccessMessage("");
+
+    if (form.password !== form.confirmPassword) {
+      const message = "Passwords do not match.";
+      setError(message);
+      onToast(message, "error");
+      return;
+    }
+
+    setSubmitting(true);
+
+    try {
+      const response = await fetch(`${API_BASE}/auth/reset-password`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: form.email,
+          password: form.password,
+        }),
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || "Unable to reset password.");
+      }
+
+      const message = `${data.accountType === "admin" ? "Admin" : "Owner"} password reset successful.`;
+      setSuccessMessage(message);
+      onToast(message);
+      setForm((current) => ({
+        ...current,
+        password: "",
+        confirmPassword: "",
+      }));
+    } catch (requestError) {
+      setError(requestError.message);
+      onToast(requestError.message, "error");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="grid gap-4">
+      <div>
+        <h3 className="text-2xl font-black text-[#20120e]">{heading}</h3>
+        <p className="mt-2 text-sm text-[#746157]">{description}</p>
+      </div>
+
+      <form className="grid gap-4" onSubmit={handleSubmit}>
+        <Field label="Registered email">
+          <input
+            className={inputClass}
+            type="email"
+            name="email"
+            value={form.email}
+            onChange={updateField}
+            placeholder="Enter registered email"
+            required
+          />
+        </Field>
+
+        <Field label="New password">
+          <input
+            className={inputClass}
+            type={showPassword ? "text" : "password"}
+            name="password"
+            value={form.password}
+            onChange={updateField}
+            placeholder="Enter new password"
+            required
+            minLength={6}
+          />
+        </Field>
+
+        <Field label="Confirm new password">
+          <div className="grid gap-2">
             <input
               className={inputClass}
-              type="email"
-              name="email"
-              value={form.email}
+              type={showPassword ? "text" : "password"}
+              name="confirmPassword"
+              value={form.confirmPassword}
               onChange={updateField}
-              placeholder="owner@example.com"
+              placeholder="Re-enter new password"
               required
+              minLength={6}
             />
-          </Field>
+            <button
+              className="w-fit text-sm font-medium text-[#746157] underline decoration-[#d95722]/35 underline-offset-4"
+              type="button"
+              onClick={() => setShowPassword((current) => !current)}
+            >
+              {showPassword ? "Hide password" : "View password"}
+            </button>
+          </div>
+        </Field>
 
-          <Field label="Password">
-            <div className="grid gap-2">
-              <input
-                className={inputClass}
-                type={showPassword ? "text" : "password"}
-                name="password"
-                value={form.password}
-                onChange={updateField}
-                placeholder="Enter password"
-                required
-              />
-              <button
-                className="w-fit text-sm font-medium text-[#746157] underline decoration-[#d95722]/35 underline-offset-4"
-                type="button"
-                onClick={() => setShowPassword((current) => !current)}
-              >
-                {showPassword ? "Hide password" : "View password"}
-              </button>
-            </div>
-          </Field>
+        {error ? (
+          <p className="text-sm font-medium text-[#ad2f2f]">{error}</p>
+        ) : null}
+        {successMessage ? (
+          <p className="text-sm font-medium text-[#1d7d53]">{successMessage}</p>
+        ) : null}
 
-          {error ? (
-            <p className="text-sm font-medium text-[#ad2f2f]">{error}</p>
-          ) : null}
+        <button
+          className={primaryButtonClass}
+          type="submit"
+          disabled={submitting}
+        >
+          {submitting ? "Please wait..." : "Reset Password"}
+        </button>
 
-          <button
-            className={primaryButtonClass}
-            type="submit"
-            disabled={submitting}
-          >
-            {submitting
-              ? "Please wait..."
-              : mode === "signup"
-                ? "Create Owner Account"
-                : "Login to Dashboard"}
-          </button>
-        </form>
-      </section>
+        <button
+          className="text-left text-sm font-medium text-[#746157] underline decoration-[#d95722]/35 underline-offset-4"
+          type="button"
+          onClick={onBack}
+        >
+          Back to login
+        </button>
+      </form>
     </div>
   );
 }
@@ -1396,6 +1829,279 @@ function DashboardPage({ session, onAuthRefresh, onLogout, onToast }) {
   );
 }
 
+function AdminDashboardPage({ session, onLogout, onToast }) {
+  const navigate = useNavigate();
+  const [payload, setPayload] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
+
+  useEffect(() => {
+    loadRegistrations();
+  }, [session.token]);
+
+  async function loadRegistrations() {
+    setLoading(true);
+    setError("");
+
+    try {
+      const response = await fetch(`${API_BASE}/admin/registrations`, {
+        headers: {
+          Authorization: `Bearer ${session.token}`,
+        },
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || "Unable to load admin dashboard.");
+      }
+
+      setPayload(data);
+    } catch (requestError) {
+      setError(requestError.message);
+      onToast(requestError.message, "error");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function handleAdminLogout() {
+    onLogout();
+    onToast("Admin logged out.");
+    navigate("/admin");
+  }
+
+  const registrations = payload?.registrations || [];
+  const normalizedSearchTerm = searchTerm.trim().toLowerCase();
+  const filteredRegistrations = normalizedSearchTerm
+    ? registrations.filter((registration) =>
+        [
+          registration.businessName,
+          registration.businessType,
+          registration.email,
+          registration.phone,
+          registration.slug,
+          registration.address,
+        ]
+          .join(" ")
+          .toLowerCase()
+          .includes(normalizedSearchTerm),
+      )
+    : registrations;
+
+  if (loading) {
+    return <StatusScreen>Loading admin dashboard...</StatusScreen>;
+  }
+
+  if (error && !payload) {
+    return <StatusScreen error>{error}</StatusScreen>;
+  }
+
+  return (
+    <div className={shellClass}>
+      <section className={panelClass}>
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div className="grid gap-2">
+            <p className={eyebrowClass}>Admin Dashboard</p>
+            <h1 className="text-3xl font-black text-[#20120e] sm:text-4xl">
+              Owner registrations and business details
+            </h1>
+            <p className="max-w-3xl text-sm leading-7 text-[#746157] sm:text-base">
+              Review every owner account, menu publishing activity, public menu
+              link, and contact information from one place.
+            </p>
+          </div>
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <button
+              className={ghostButtonClass}
+              type="button"
+              onClick={loadRegistrations}
+            >
+              Refresh
+            </button>
+            <button
+              className={dangerButtonClass}
+              type="button"
+              onClick={handleAdminLogout}
+            >
+              Logout
+            </button>
+          </div>
+        </div>
+      </section>
+
+      {error ? <NoticeBox tone="error">{error}</NoticeBox> : null}
+
+      <section className={`${panelClass} mt-5`}>
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+          <SummaryCard
+            label="Registrations"
+            value={payload?.summary?.totalRegistrations || 0}
+          />
+          <SummaryCard
+            label="Menu Items"
+            value={payload?.summary?.totalMenuItems || 0}
+          />
+          <SummaryCard
+            label="Visible Items"
+            value={payload?.summary?.totalVisibleMenuItems || 0}
+          />
+          <SummaryCard
+            label="Hidden Items"
+            value={payload?.summary?.totalHiddenMenuItems || 0}
+          />
+          <SummaryCard
+            label="Social Links"
+            value={payload?.summary?.totalSocialLinks || 0}
+          />
+        </div>
+      </section>
+
+      <section className={`${panelClass} mt-5`}>
+        <div className="grid gap-4 lg:grid-cols-[1fr_auto] lg:items-end">
+          <Field label="Search by business, email, slug, type, phone, or address">
+            <input
+              className={inputClass}
+              value={searchTerm}
+              onChange={(event) => setSearchTerm(event.target.value)}
+              placeholder="Search registrations"
+            />
+          </Field>
+          <div className="rounded-2xl border border-[rgba(83,48,34,0.12)] bg-white/70 px-4 py-3 text-sm text-[#746157]">
+            Showing {filteredRegistrations.length} of {registrations.length}
+          </div>
+        </div>
+      </section>
+
+      <section className={`${panelClass} mt-5`}>
+        <div className="mb-5 flex flex-col gap-2">
+          <p className={eyebrowClass}>Registrations</p>
+          <h2 className="text-2xl font-black text-[#20120e]">
+            Complete owner details
+          </h2>
+        </div>
+
+        {filteredRegistrations.length > 0 ? (
+          <div className="grid gap-5 xl:grid-cols-2">
+            {filteredRegistrations.map((registration) => (
+              <article
+                key={registration.id}
+                className="grid gap-5 rounded-3xl border border-[rgba(83,48,34,0.12)] bg-white/92 p-5"
+              >
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="grid gap-2">
+                    <span className="w-fit rounded-full bg-[#d95722]/10 px-3 py-1 text-xs font-semibold text-[#d95722]">
+                      {formatBusinessType(registration.businessType)}
+                    </span>
+                    <h3 className="wrap-break-word text-2xl font-black text-[#20120e]">
+                      {registration.businessName}
+                    </h3>
+                    <p className="text-sm text-[#746157]">
+                      Slug: {registration.slug}
+                    </p>
+                  </div>
+                  <div className="rounded-2xl bg-[#fff8f2] px-4 py-3 text-sm text-[#746157]">
+                    <p>Created</p>
+                    <p className="font-semibold text-[#20120e]">
+                      {formatDateTime(registration.createdAt)}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <DetailPill label="Email" value={registration.email} />
+                  <DetailPill
+                    label="Phone"
+                    value={registration.phone || "Not added"}
+                  />
+                  <DetailPill
+                    label="Menu items"
+                    value={registration.menuItemCount}
+                  />
+                  <DetailPill
+                    label="Visible items"
+                    value={registration.visibleMenuItemCount}
+                  />
+                  <DetailPill
+                    label="Hidden items"
+                    value={registration.hiddenMenuItemCount}
+                  />
+                  <DetailPill
+                    label="Updated"
+                    value={formatDateTime(registration.updatedAt)}
+                  />
+                </div>
+
+                <div className="grid gap-2">
+                  <p className="text-sm font-semibold text-[#20120e]">Address</p>
+                  <p className="wrap-break-word text-sm text-[#746157]">
+                    {registration.address || "Not added"}
+                  </p>
+                </div>
+
+                <div className="grid gap-2">
+                  <p className="text-sm font-semibold text-[#20120e]">
+                    Description
+                  </p>
+                  <p className="wrap-break-word text-sm text-[#746157]">
+                    {registration.description || "Not added"}
+                  </p>
+                </div>
+
+                <div className="grid gap-3">
+                  <p className="text-sm font-semibold text-[#20120e]">
+                    Social handles
+                  </p>
+                  {registration.socialLinks.length > 0 ? (
+                    <div className="flex flex-wrap gap-3">
+                      {registration.socialLinks.map((link, index) => (
+                        <a
+                          key={`${registration.id}-${link.platform}-${index}`}
+                          href={link.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-2 rounded-full border border-[rgba(83,48,34,0.12)] bg-white px-4 py-2 text-sm font-medium text-[#20120e]"
+                        >
+                          <SocialIcon
+                            platform={link.platform}
+                            url={link.url}
+                            className="h-8 w-8 rounded-full"
+                          />
+                          <span>{link.platform}</span>
+                        </a>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-[#746157]">No social handles added.</p>
+                  )}
+                </div>
+
+                <div className="grid gap-2">
+                  <p className="text-sm font-semibold text-[#20120e]">
+                    Public menu link
+                  </p>
+                  <a
+                    href={registration.publicMenuUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="wrap-break-word text-sm font-medium text-[#d95722] underline decoration-[#d95722]/35 underline-offset-4"
+                  >
+                    {registration.publicMenuUrl}
+                  </a>
+                </div>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-3xl border border-[rgba(83,48,34,0.12)] bg-white/92 p-4">
+            No registrations match the current search.
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
 function PublicMenuPage() {
   const { slug } = useParams();
   const [payload, setPayload] = useState(null);
@@ -1614,6 +2320,30 @@ function PublicMenuPage() {
         </div>
       </footer>
     </div>
+  );
+}
+
+function SummaryCard({ label, value }) {
+  return (
+    <article className="rounded-3xl border border-[rgba(83,48,34,0.12)] bg-white/92 p-5">
+      <p className="text-sm font-semibold uppercase tracking-[0.12em] text-[#746157]">
+        {label}
+      </p>
+      <p className="mt-3 text-3xl font-black text-[#20120e]">{value}</p>
+    </article>
+  );
+}
+
+function DetailPill({ label, value }) {
+  return (
+    <article className="rounded-2xl border border-[rgba(83,48,34,0.12)] bg-[#fff8f2] px-4 py-3">
+      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#746157]">
+        {label}
+      </p>
+      <p className="mt-2 wrap-break-word text-sm font-semibold text-[#20120e]">
+        {value}
+      </p>
+    </article>
   );
 }
 

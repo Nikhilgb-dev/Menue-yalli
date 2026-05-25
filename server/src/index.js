@@ -5,6 +5,8 @@ import cors from "cors";
 import express from "express";
 import { connectDatabase } from "./config/db.js";
 import authRoutes from "./routes/authRoutes.js";
+import adminRoutes from "./routes/adminRoutes.js";
+import { ensureAdminAccount } from "./controllers/authController.js";
 import dashboardRoutes from "./routes/dashboardRoutes.js";
 import publicRoutes from "./routes/publicRoutes.js";
 
@@ -19,6 +21,7 @@ const clientIndexPath = path.join(clientDistPath, "index.html");
 const hasBuiltClient = fs.existsSync(clientIndexPath);
 
 await connectDatabase();
+await ensureAdminAccount();
 
 app.use(
   cors({
@@ -30,13 +33,14 @@ app.get("/api/health", (_request, response) => {
   response.json({ ok: true });
 });
 app.use("/api/auth", authRoutes);
+app.use("/api/admin", adminRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/public", publicRoutes);
 
 if (hasBuiltClient) {
   app.use(express.static(clientDistPath));
 
-  app.get(["/", "/dashboard", "/menu/:slug"], (_request, response) => {
+  app.get(["/", "/dashboard", "/admin", "/admin/dashboard", "/menu/:slug"], (_request, response) => {
     response.sendFile(clientIndexPath);
   });
 }
