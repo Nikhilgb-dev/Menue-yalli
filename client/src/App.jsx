@@ -1759,7 +1759,7 @@ function DashboardPage({ session, onAuthRefresh, onLogout, onToast }) {
                               </span>
                             </div>
                             <p className="wrap-break-word text-[#746157]">
-                              {item.description || "No description added."}
+                              {item.description || ""}
                             </p>
                             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                               <span
