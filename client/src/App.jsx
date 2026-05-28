@@ -2260,7 +2260,7 @@ function PublicMenuPage() {
                     </span>
                   </div>
                   <p className="wrap-break-word text-[#746157]">
-                    {item.description || "No description added."}
+                    {item.description || ""}
                   </p>
                 </div>
               </article>
