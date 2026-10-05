@@ -4,7 +4,8 @@ const socialLinkSchema = new mongoose.Schema(
   {
     platform: { type: String, required: true, trim: true },
     url: { type: String, required: true, trim: true },
-    ctaLabel: { type: String, trim: true, default: "" }
+    ctaLabel: { type: String, trim: true, default: "" },
+    clickCount: { type: Number, default: 0, min: 0 }
   },
   { _id: false }
 );
@@ -23,6 +24,7 @@ const ownerSchema = new mongoose.Schema(
     phone: { type: String, trim: true, default: "" },
     address: { type: String, trim: true, default: "" },
     description: { type: String, trim: true, default: "" },
+    scanCount: { type: Number, default: 0, min: 0 },
     socialLinks: { type: [socialLinkSchema], default: [] }
   },
   {

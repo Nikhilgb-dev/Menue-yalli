@@ -31,6 +31,28 @@ function Field({ label, children }) {
   );
 }
 
+function FoodTypeIcon({ type, label, className = "" }) {
+  const colorClass =
+    type === "non-veg"
+      ? "border-[#b52525] text-[#b52525]"
+      : type === "egg"
+        ? "border-[#d99a00] text-[#d99a00]"
+        : "border-[#16803c] text-[#16803c]";
+
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 text-xs font-bold ${colorClass} ${className}`}
+      title={label}
+      aria-label={label}
+    >
+      <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-[3px] border border-current">
+        <span className="h-2 w-2 rounded-full bg-current" />
+      </span>
+      <span>{label}</span>
+    </span>
+  );
+}
+
 function NoticeBox({ children, tone }) {
   return (
     <section
@@ -80,4 +102,12 @@ function StatusScreen({ children, error = false }) {
   );
 }
 
-export { DetailPill, Field, NoticeBox, StatusScreen, SummaryCard, ToastViewport };
+export {
+  DetailPill,
+  Field,
+  FoodTypeIcon,
+  NoticeBox,
+  StatusScreen,
+  SummaryCard,
+  ToastViewport,
+};

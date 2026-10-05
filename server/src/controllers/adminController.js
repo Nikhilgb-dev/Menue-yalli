@@ -54,6 +54,7 @@ export async function getAdminRegistrations(request, response) {
       phone: owner.phone,
       address: owner.address,
       description: owner.description,
+      scanCount: owner.scanCount || 0,
       socialLinks: owner.socialLinks || [],
       menuItemCount: ownerStats.menuItemCount,
       visibleMenuItemCount: ownerStats.visibleMenuItemCount,
@@ -71,6 +72,11 @@ export async function getAdminRegistrations(request, response) {
       accumulator.totalVisibleMenuItems += registration.visibleMenuItemCount;
       accumulator.totalHiddenMenuItems += registration.hiddenMenuItemCount;
       accumulator.totalSocialLinks += registration.socialLinks.length;
+      accumulator.totalScans += registration.scanCount;
+      accumulator.totalSocialClicks += registration.socialLinks.reduce(
+        (clickTotal, link) => clickTotal + (link.clickCount || 0),
+        0
+      );
       accumulator.businessTypes[registration.businessType] =
         (accumulator.businessTypes[registration.businessType] || 0) + 1;
       return accumulator;
@@ -81,6 +87,8 @@ export async function getAdminRegistrations(request, response) {
       totalVisibleMenuItems: 0,
       totalHiddenMenuItems: 0,
       totalSocialLinks: 0,
+      totalScans: 0,
+      totalSocialClicks: 0,
       businessTypes: {}
     }
   );

@@ -118,7 +118,7 @@ function AdminDashboardPage({ session, onLogout, onToast }) {
       {error ? <NoticeBox tone="error">{error}</NoticeBox> : null}
 
       <section className={`${panelClass} mt-5`}>
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-7">
           <SummaryCard
             label="Registrations"
             value={payload?.summary?.totalRegistrations || 0}
@@ -138,6 +138,14 @@ function AdminDashboardPage({ session, onLogout, onToast }) {
           <SummaryCard
             label="Social Links"
             value={payload?.summary?.totalSocialLinks || 0}
+          />
+          <SummaryCard
+            label="Scans"
+            value={payload?.summary?.totalScans || 0}
+          />
+          <SummaryCard
+            label="Social Clicks"
+            value={payload?.summary?.totalSocialClicks || 0}
           />
         </div>
       </section>
@@ -212,6 +220,17 @@ function AdminDashboardPage({ session, onLogout, onToast }) {
                     value={registration.hiddenMenuItemCount}
                   />
                   <DetailPill
+                    label="Scans"
+                    value={registration.scanCount || 0}
+                  />
+                  <DetailPill
+                    label="Social clicks"
+                    value={(registration.socialLinks || []).reduce(
+                      (total, link) => total + (link.clickCount || 0),
+                      0,
+                    )}
+                  />
+                  <DetailPill
                     label="Updated"
                     value={formatDateTime(registration.updatedAt)}
                   />
@@ -252,7 +271,9 @@ function AdminDashboardPage({ session, onLogout, onToast }) {
                             url={link.url}
                             className="h-8 w-8 rounded-full"
                           />
-                          <span>{link.platform}</span>
+                          <span>
+                            {link.platform} ({link.clickCount || 0})
+                          </span>
                         </a>
                       ))}
                     </div>

@@ -15,6 +15,11 @@ function normalizeCategory(value) {
   return category.toLowerCase() === "menu" ? "" : category;
 }
 
+function normalizeFoodType(value) {
+  const foodType = String(value || "veg").trim().toLowerCase();
+  return ["veg", "non-veg", "egg"].includes(foodType) ? foodType : "veg";
+}
+
 function normalizeUrl(url) {
   const trimmedValue = String(url || "").trim();
 
@@ -29,17 +34,32 @@ function normalizeUrl(url) {
   return `https://${trimmedValue}`;
 }
 
-function normalizeSocialLinks(value) {
+function normalizeSocialLinks(value, existingLinks = []) {
   if (!Array.isArray(value)) {
     return [];
   }
 
+  const existingClickCounts = new Map(
+    existingLinks.map((item) => [
+      `${String(item.platform || "").trim().toLowerCase()}|${String(item.url || "").trim()}`,
+      item.clickCount || 0
+    ])
+  );
+
   return value
-    .map((item) => ({
-      platform: String(item.platform || "").trim(),
-      url: normalizeUrl(item.url),
-      ctaLabel: String(item.ctaLabel || "").trim()
-    }))
+    .map((item) => {
+      const platform = String(item.platform || "").trim();
+      const url = normalizeUrl(item.url);
+
+      return {
+        platform,
+        url,
+        ctaLabel: String(item.ctaLabel || "").trim(),
+        clickCount:
+          existingClickCounts.get(`${platform.toLowerCase()}|${url}`) ||
+          Number(item.clickCount || 0)
+      };
+    })
     .filter((item) => item.platform && item.url);
 }
 
@@ -66,6 +86,7 @@ export async function getDashboard(request, response) {
       phone: request.owner.phone,
       address: request.owner.address,
       description: request.owner.description,
+      scanCount: request.owner.scanCount || 0,
       socialLinks: request.owner.socialLinks
     },
     publicMenuUrl: `${buildPublicBaseUrl(request)}/menu/${request.owner.slug}`,
@@ -74,6 +95,7 @@ export async function getDashboard(request, response) {
       id: item._id,
       name: item.name,
       category: normalizeCategory(item.category),
+      foodType: normalizeFoodType(item.foodType),
       description: item.description,
       price: item.price,
       available: item.available,
@@ -94,7 +116,7 @@ export async function updateProfile(request, response) {
       phone: String(phone || "").trim(),
       address: String(address || "").trim(),
       description: String(description || "").trim(),
-      socialLinks: normalizeSocialLinks(socialLinks)
+      socialLinks: normalizeSocialLinks(socialLinks, request.owner.socialLinks || [])
     },
     { new: true, runValidators: true }
   ).select("-passwordHash");
@@ -109,6 +131,7 @@ export async function updateProfile(request, response) {
       phone: owner.phone,
       address: owner.address,
       description: owner.description,
+      scanCount: owner.scanCount || 0,
       socialLinks: owner.socialLinks
     }
   });

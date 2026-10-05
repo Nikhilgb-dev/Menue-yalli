@@ -1,4 +1,14 @@
-export const API_BASE = import.meta.env.VITE_API_URL || "/api";
+function normalizeApiBase(value) {
+  const rawValue = String(value || "/api").trim().replace(/\/+$/, "");
+
+  if (!rawValue || rawValue === "/api" || rawValue.endsWith("/api")) {
+    return rawValue || "/api";
+  }
+
+  return `${rawValue}/api`;
+}
+
+export const API_BASE = normalizeApiBase(import.meta.env.VITE_API_URL);
 export const STORAGE_KEY = "menu-platform-session";
 export const ADMIN_STORAGE_KEY = "menu-platform-admin-session";
 
@@ -26,6 +36,24 @@ export const defaultCategories = [
   "Hot Kitchen",
   "Pasta",
   "Mango Specials",
+];
+
+export const foodTypeConfigs = [
+  {
+    id: "veg",
+    label: "Veg",
+    dotClassName: "border-[#16803c] text-[#16803c]",
+  },
+  {
+    id: "non-veg",
+    label: "Non Veg",
+    dotClassName: "border-[#b52525] text-[#b52525]",
+  },
+  {
+    id: "egg",
+    label: "Egg",
+    dotClassName: "border-[#d99a00] text-[#d99a00]",
+  },
 ];
 
 export const socialPlatformConfigs = [

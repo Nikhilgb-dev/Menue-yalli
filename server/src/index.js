@@ -36,6 +36,9 @@ app.use("/api/auth", authRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/public", publicRoutes);
+app.use("/api", (_request, response) => {
+  response.status(404).json({ message: "API endpoint not found." });
+});
 
 if (hasBuiltClient) {
   app.use(express.static(clientDistPath));

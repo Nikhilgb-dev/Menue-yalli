@@ -23,6 +23,11 @@ function normalizeCategory(value) {
   return category.toLowerCase() === "menu" ? "" : category;
 }
 
+function normalizeFoodType(value) {
+  const foodType = String(value || "veg").trim().toLowerCase();
+  return ["veg", "non-veg", "egg"].includes(foodType) ? foodType : "veg";
+}
+
 export async function getPublicMenu(request, response) {
   const owner = await Owner.findOne({ slug: request.params.slug }).select("-passwordHash");
 
@@ -33,7 +38,9 @@ export async function getPublicMenu(request, response) {
   const menuItems = await MenuItem.find({
     ownerId: owner._id,
     available: true
-  }).sort({ createdAt: -1 });
+  }).sort({ category: 1, createdAt: -1 });
+
+  await Owner.updateOne({ _id: owner._id }, { $inc: { scanCount: 1 } });
 
   return response.json({
     owner: {
@@ -49,6 +56,7 @@ export async function getPublicMenu(request, response) {
       id: item._id,
       name: item.name,
       category: normalizeCategory(item.category),
+      foodType: normalizeFoodType(item.foodType),
       description: item.description,
       price: item.price,
       imageUrl: buildImageUrl(request, item.imagePath)
@@ -80,4 +88,33 @@ export async function getQrCode(request, response) {
   );
 
   return response.send(qrBuffer);
+}
+
+export async function trackSocialClick(request, response) {
+  const owner = await Owner.findOne({ slug: request.params.slug });
+
+  if (!owner) {
+    return response.status(404).json({ message: "Menu not found." });
+  }
+
+  const platform = String(request.body?.platform || "").trim();
+  const url = String(request.body?.url || "").trim();
+  const socialLink = owner.socialLinks.find(
+    (link) =>
+      link.platform.toLowerCase() === platform.toLowerCase() &&
+      link.url === url
+  );
+
+  if (!socialLink) {
+    return response.status(404).json({ message: "Social link not found." });
+  }
+
+  socialLink.clickCount = (socialLink.clickCount || 0) + 1;
+  await owner.save();
+
+  return response.json({
+    ok: true,
+    platform: socialLink.platform,
+    clickCount: socialLink.clickCount
+  });
 }

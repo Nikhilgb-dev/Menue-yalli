@@ -29,6 +29,12 @@ Multi-tenant menu platform for food carts, hotels, cafes, and restaurants.
 Frontend runs on `http://localhost:5173`.
 Backend runs on `http://localhost:5001`.
 
+## Deploy
+
+VPS deployment can be automated through GitHub Actions and PM2. See
+`DEPLOYMENT.md` for the one-time VPS setup, required GitHub secrets, and the
+deploy flow.
+
 ## Environment
 
 Use a root `.env` file:

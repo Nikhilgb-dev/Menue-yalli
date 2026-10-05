@@ -34,6 +34,11 @@ function normalizeCategory(value) {
   return category.toLowerCase() === "menu" ? "" : category;
 }
 
+function normalizeFoodType(value) {
+  const foodType = String(value || "veg").trim().toLowerCase();
+  return ["veg", "non-veg", "egg"].includes(foodType) ? foodType : "veg";
+}
+
 export async function createMenuItem(request, response) {
   const uploadedImages = getUploadedImages(request);
 
@@ -71,6 +76,7 @@ export async function createMenuItem(request, response) {
           ownerId: request.owner._id,
           name,
           category: normalizeCategory(item?.category),
+          foodType: normalizeFoodType(item?.foodType),
           description,
           price,
           available: normalizeAvailable(item?.available),
@@ -95,6 +101,7 @@ export async function createMenuItem(request, response) {
           id: item._id,
           name: item.name,
           category: normalizeCategory(item.category),
+          foodType: normalizeFoodType(item.foodType),
           description: item.description,
           price: item.price,
           available: item.available,
@@ -112,7 +119,7 @@ export async function createMenuItem(request, response) {
     }
   }
 
-  const { name, category, description, price, available } = request.body;
+  const { name, category, foodType, description, price, available } = request.body;
   const image = uploadedImages[0];
 
   if (!name || price === undefined) {
@@ -129,6 +136,7 @@ export async function createMenuItem(request, response) {
     ownerId: request.owner._id,
     name: String(name).trim(),
     category: normalizeCategory(category),
+    foodType: normalizeFoodType(foodType),
     description: String(description || "").trim(),
     price: Number(price),
     available: normalizeAvailable(available),
@@ -141,6 +149,7 @@ export async function createMenuItem(request, response) {
       id: menuItem._id,
       name: menuItem.name,
       category: normalizeCategory(menuItem.category),
+      foodType: normalizeFoodType(menuItem.foodType),
       description: menuItem.description,
       price: menuItem.price,
       available: menuItem.available,
@@ -159,7 +168,7 @@ export async function updateMenuItem(request, response) {
     return response.status(404).json({ message: "Menu item not found." });
   }
 
-  const { name, category, description, price, available } = request.body;
+  const { name, category, foodType, description, price, available } = request.body;
 
   if (name !== undefined) {
     existingItem.name = String(name).trim();
@@ -171,6 +180,10 @@ export async function updateMenuItem(request, response) {
 
   if (category !== undefined) {
     existingItem.category = normalizeCategory(category);
+  }
+
+  if (foodType !== undefined) {
+    existingItem.foodType = normalizeFoodType(foodType);
   }
 
   if (price !== undefined) {
@@ -199,6 +212,7 @@ export async function updateMenuItem(request, response) {
       id: existingItem._id,
       name: existingItem.name,
       category: normalizeCategory(existingItem.category),
+      foodType: normalizeFoodType(existingItem.foodType),
       description: existingItem.description,
       price: existingItem.price,
       available: existingItem.available,

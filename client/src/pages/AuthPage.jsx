@@ -231,14 +231,6 @@ function AuthPage({ onAuthSuccess, onToast }) {
                 </button>
               ) : null}
 
-              <div className="pt-1 text-center">
-                <a
-                  href="/admin"
-                  className="text-sm font-medium text-[#746157] underline decoration-[#d95722]/35 underline-offset-4"
-                >
-                  Admin login
-                </a>
-              </div>
             </form>
           </>
         )}

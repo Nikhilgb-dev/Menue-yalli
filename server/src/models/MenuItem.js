@@ -10,6 +10,11 @@ const menuItemSchema = new mongoose.Schema(
     },
     name: { type: String, required: true, trim: true },
     category: { type: String, trim: true, default: "" },
+    foodType: {
+      type: String,
+      enum: ["veg", "non-veg", "egg"],
+      default: "veg"
+    },
     description: { type: String, trim: true, default: "" },
     price: { type: Number, required: true, min: 0 },
     imagePath: { type: String, required: true },

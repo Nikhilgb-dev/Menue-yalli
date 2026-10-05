@@ -1,10 +1,11 @@
-import { socialPlatformConfigs } from "../config/appConfig";
+import { foodTypeConfigs, socialPlatformConfigs } from "../config/appConfig";
 
 function createMenuDraft() {
   return {
     id: `draft-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     name: "",
     category: "",
+    foodType: "veg",
     description: "",
     price: "",
     available: true,
@@ -16,6 +17,7 @@ function createEditDraft(item) {
   return {
     name: item.name || "",
     category: item.category || "",
+    foodType: item.foodType || "veg",
     description: item.description || "",
     price: String(item.price ?? ""),
     available: Boolean(item.available),
@@ -43,6 +45,7 @@ function hydrateSocialLinks(links) {
       platform: platformConfig.label,
       url: savedLink.url || "",
       ctaLabel: savedLink.ctaLabel || platformConfig.defaultCta,
+      clickCount: savedLink.clickCount || 0,
     };
   });
 }
@@ -103,6 +106,14 @@ function getMenuCategories(menuItems) {
   );
 }
 
+function getFoodTypeConfig(foodType) {
+  return (
+    foodTypeConfigs.find(
+      (item) => item.id === String(foodType || "veg").trim().toLowerCase(),
+    ) || foodTypeConfigs[0]
+  );
+}
+
 function formatDateTime(value) {
   if (!value) {
     return "Not available";
@@ -126,6 +137,7 @@ export {
   createMenuDraft,
   formatBusinessType,
   formatDateTime,
+  getFoodTypeConfig,
   getMenuCategories,
   getSocialPlatformConfigByLabel,
   groupMenuItemsByCategory,

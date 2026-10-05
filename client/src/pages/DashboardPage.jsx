@@ -4,6 +4,7 @@ import {
   dangerButtonClass,
   defaultCategories,
   eyebrowClass,
+  foodTypeConfigs,
   ghostButtonClass,
   inputClass,
   panelClass,
@@ -12,11 +13,12 @@ import {
   socialPlatformConfigs,
 } from "../config/appConfig";
 import SocialIcon from "../components/SocialIcon";
-import { Field, NoticeBox, StatusScreen } from "../components/ui";
+import { Field, FoodTypeIcon, NoticeBox, StatusScreen } from "../components/ui";
 import {
   createEditDraft,
   createMenuDraft,
   getMenuCategories,
+  getFoodTypeConfig,
   getSocialPlatformConfigByLabel,
   groupMenuItemsByCategory,
   hydrateSocialLinks,
@@ -69,6 +71,10 @@ function DashboardPage({ session, onAuthRefresh, onLogout, onToast }) {
 
       if (!response.ok) {
         throw new Error(data.message || "Unable to load dashboard.");
+      }
+
+      if (!data.owner) {
+        throw new Error("Dashboard response is missing owner details.");
       }
 
       setDashboard(data);
@@ -193,6 +199,7 @@ function DashboardPage({ session, onAuthRefresh, onLogout, onToast }) {
         return {
           name: draft.name,
           category: draft.category,
+          foodType: draft.foodType,
           description: draft.description,
           price: draft.price,
           available: draft.available,
@@ -294,6 +301,7 @@ function DashboardPage({ session, onAuthRefresh, onLogout, onToast }) {
       const formData = new FormData();
       formData.append("name", editDraft.name);
       formData.append("category", editDraft.category);
+      formData.append("foodType", editDraft.foodType);
       formData.append("description", editDraft.description);
       formData.append("price", editDraft.price);
       formData.append("available", String(editDraft.available));
@@ -408,6 +416,32 @@ function DashboardPage({ session, onAuthRefresh, onLogout, onToast }) {
       {error ? <NoticeBox tone="error">{error}</NoticeBox> : null}
       {notice ? <NoticeBox tone="success">{notice}</NoticeBox> : null}
 
+      <section className="mb-5 grid gap-4 md:grid-cols-3">
+        <article className="rounded-3xl border border-[rgba(83,48,34,0.12)] bg-white/92 p-5">
+          <p className={eyebrowClass}>Customer Scans</p>
+          <p className="text-3xl font-black text-[#20120e]">
+            {dashboard.owner.scanCount || 0}
+          </p>
+        </article>
+        <article className="rounded-3xl border border-[rgba(83,48,34,0.12)] bg-white/92 p-5">
+          <p className={eyebrowClass}>Social Clicks</p>
+          <p className="text-3xl font-black text-[#20120e]">
+            {(dashboard.owner.socialLinks || []).reduce(
+              (total, link) => total + (link.clickCount || 0),
+              0,
+            )}
+          </p>
+        </article>
+        <article className="rounded-3xl border border-[rgba(83,48,34,0.12)] bg-white/92 p-5">
+          <p className={eyebrowClass}>Google Review Clicks</p>
+          <p className="text-3xl font-black text-[#20120e]">
+            {dashboard.owner.socialLinks?.find(
+              (link) => link.platform === "Google Reviews",
+            )?.clickCount || 0}
+          </p>
+        </article>
+      </section>
+
       <section className="mb-5 grid gap-5 xl:grid-cols-[1.25fr_0.75fr]">
         <article className={panelClass}>
           <div className="mb-5">
@@ -497,7 +531,9 @@ function DashboardPage({ session, onAuthRefresh, onLogout, onToast }) {
                   </div>
                   <div className="grid content-center gap-1">
                     <strong className="text-[#20120e]">{link.platform}</strong>
-                    <span className="text-xs text-[#746157]">{link.ctaLabel}</span>
+                    <span className="text-xs text-[#746157]">
+                      {link.clickCount || 0} clicks
+                    </span>
                   </div>
                   <input
                     className={inputClass}
@@ -650,6 +686,21 @@ function DashboardPage({ session, onAuthRefresh, onLogout, onToast }) {
                       placeholder="Price"
                     />
                   </Field>
+                  <Field label="Food type">
+                    <select
+                      className={inputClass}
+                      value={draft.foodType}
+                      onChange={(event) =>
+                        updateMenuDraft(draft.id, "foodType", event.target.value)
+                      }
+                    >
+                      {foodTypeConfigs.map((foodType) => (
+                        <option key={foodType.id} value={foodType.id}>
+                          {foodType.label}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
                 </div>
 
                 <Field label="Description">
@@ -785,6 +836,21 @@ function DashboardPage({ session, onAuthRefresh, onLogout, onToast }) {
                                   }
                                 />
                               </Field>
+                              <Field label="Food type">
+                                <select
+                                  className={inputClass}
+                                  value={editDraft.foodType}
+                                  onChange={(event) =>
+                                    updateEditDraft("foodType", event.target.value)
+                                  }
+                                >
+                                  {foodTypeConfigs.map((foodType) => (
+                                    <option key={foodType.id} value={foodType.id}>
+                                      {foodType.label}
+                                    </option>
+                                  ))}
+                                </select>
+                              </Field>
                               <Field label="Description">
                                 <textarea
                                   className={inputClass}
@@ -846,9 +912,15 @@ function DashboardPage({ session, onAuthRefresh, onLogout, onToast }) {
                           <>
                             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                               <div className="grid gap-2">
-                                <span className="w-fit rounded-full bg-[#d95722]/10 px-3 py-1 text-xs font-semibold text-[#d95722]">
-                                  {item.category || "Uncategorized"}
-                                </span>
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className="w-fit rounded-full bg-[#d95722]/10 px-3 py-1 text-xs font-semibold text-[#d95722]">
+                                    {item.category || "Uncategorized"}
+                                  </span>
+                                  <FoodTypeIcon
+                                    type={item.foodType}
+                                    label={getFoodTypeConfig(item.foodType).label}
+                                  />
+                                </div>
                                 <h3 className="text-xl font-bold text-[#20120e]">
                                   {item.name}
                                 </h3>
@@ -857,9 +929,11 @@ function DashboardPage({ session, onAuthRefresh, onLogout, onToast }) {
                                 Rs. {Number(item.price).toFixed(2)}
                               </span>
                             </div>
-                            <p className="wrap-break-word text-[#746157]">
-                              {item.description || ""}
-                            </p>
+                            {item.description ? (
+                              <p className="wrap-break-word text-[#746157]">
+                                {item.description}
+                              </p>
+                            ) : null}
                             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                               <span
                                 className={`rounded-full px-4 py-3 text-center text-sm font-bold ${
